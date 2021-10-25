@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
         printf("usage: %s addr\n", argv[0]);
         exit(0);
     }
-
+    printf("sizeof(nw_addr_t):%lu sizeof(sockaddr_in6):%lu\n", sizeof(nw_addr_t), sizeof(struct sockaddr_in6));
     nw_clt_cfg cfg;
     memset(&cfg, 0, sizeof(cfg));
     cfg.max_pkg_size = 10240;

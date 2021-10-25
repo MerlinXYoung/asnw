@@ -7,7 +7,7 @@
 # include <stdlib.h>
 # include <unistd.h>
 # include <sys/time.h>
-
+#include "nw_mem.h"
 # include "nw_clt.h"
 
 static int create_socket(int family, int sock_type)
@@ -180,17 +180,6 @@ nw_clt *nw_clt_create(nw_clt_cfg *cfg, nw_clt_type *type, void *privdata)
     memset(clt, 0, sizeof(nw_clt));
     clt->type = *type;
     clt->reconnect_timeout = cfg->reconnect_timeout  == 0 ? 1.0 : cfg->reconnect_timeout;
-    if (cfg->buf_pool) {
-        clt->custom_buf_pool = true;
-        clt->buf_pool = cfg->buf_pool;
-    } else {
-        clt->custom_buf_pool = false;
-        clt->buf_pool = nw_buf_pool_create(cfg->max_pkg_size);
-        if (clt->buf_pool == NULL) {
-            nw_clt_release(clt);
-            return NULL;
-        }
-    }
     clt->read_mem = cfg->read_mem;
     clt->write_mem = cfg->write_mem;
 
@@ -200,10 +189,10 @@ nw_clt *nw_clt_create(nw_clt_cfg *cfg, nw_clt_type *type, void *privdata)
         return NULL;
     }
     memset(host_addr, 0, sizeof(nw_addr_t));
-    host_addr->family = cfg->addr.family;
+    host_addr->s_family = cfg->addr.s_family;
     host_addr->addrlen = cfg->addr.addrlen;
 
-    if (nw_ses_init(&clt->ses, nw_default_loop, clt->buf_pool, cfg->buf_limit, NW_SES_TYPE_CLIENT) < 0) {
+    if (nw_ses_init(&clt->ses, nw_default_loop, cfg->max_pkg_size, cfg->buf_limit, NW_SES_TYPE_CLIENT) < 0) {
         nw_clt_release(clt);
         return NULL;
     }
@@ -225,17 +214,21 @@ nw_clt *nw_clt_create(nw_clt_cfg *cfg, nw_clt_type *type, void *privdata)
 
 int nw_clt_start(nw_clt *clt)
 {
-    int sockfd = create_socket(clt->ses.peer_addr.family, clt->ses.sock_type);
+    int sockfd = create_socket(clt->ses.peer_addr.s_family, clt->ses.sock_type);
     if (sockfd < 0) {
         return -1;
     }
     clt->ses.sockfd = sockfd;
-    if (clt->ses.peer_addr.family == AF_UNIX && clt->ses.sock_type == SOCK_DGRAM) {
+    if (clt->ses.peer_addr.s_family == AF_UNIX && clt->ses.sock_type == SOCK_DGRAM) {
+#ifdef _NW_USE_UN_
         clt->ses.host_addr->un.sun_family = AF_UNIX;
         generate_random_path(clt->ses.host_addr->un.sun_path, sizeof(clt->ses.host_addr->un.sun_path), "dgram", ".sock");
         if (nw_ses_bind(&clt->ses, clt->ses.host_addr) < 0) {
             return -1;
         }
+#else
+        return -1;
+#endif
     }
 
     if (clt->ses.sock_type == SOCK_STREAM || clt->ses.sock_type == SOCK_SEQPACKET) {
@@ -276,9 +269,6 @@ int nw_clt_close(nw_clt *clt)
 void nw_clt_release(nw_clt *clt)
 {
     nw_ses_release(&clt->ses);
-    if (!clt->custom_buf_pool && clt->buf_pool) {
-        nw_buf_pool_release(clt->buf_pool);
-    }
     free(clt->ses.host_addr);
     free(clt);
 }

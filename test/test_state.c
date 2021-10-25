@@ -8,6 +8,7 @@
 # include <error.h>
 
 # include "nw_state.h"
+#include "nw_mem.h"
 
 struct test_data {
     char *str;
@@ -31,13 +32,14 @@ int main(int argc, char *argv[])
     struct nw_state_type type;
     type.on_timeout = on_timeout;
     type.on_release = on_release;
+    uint32_t id = 0;
 
     nw_state *state = nw_state_create(&type, sizeof(struct test_data));
     if (state == NULL) {
         error(1, errno, "nw_state_create fail");
     }
 
-    nw_state_entry *entry = nw_state_add(state, 1.0);
+    nw_state_entry *entry = nw_state_add(state, 1.0, ++id);
     if (entry == NULL) {
         error(1, errno, "nw_state_add fail");
     }
@@ -56,7 +58,7 @@ int main(int argc, char *argv[])
     nw_state_del(state, 1);
 
     for (int i = 0; i < 100; ++i) {
-        entry = nw_state_add(state, 1.0);
+        entry = nw_state_add(state, 1.0, ++id);
         if (entry == NULL) {
             error(1, errno, "nw_state_add fail");
         }

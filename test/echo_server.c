@@ -64,7 +64,7 @@ void on_error_msg(nw_ses *ses, const char *msg)
 void on_timer(nw_timer *timer, void *privdata)
 {
     nw_svr *svr = (nw_svr *)privdata;
-    printf("clt count: %u\n", svr->clt_count);
+    printf("clt count: %u\n", svr->clt_cnt);
 }
 
 int main(int argc, char *argv[])

@@ -7,21 +7,25 @@
 # define _NW_EVT_H_
 
 # include "ev.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
+    /* the default global loop instance */
+    extern struct ev_loop* nw_default_loop;
 
-/* the default global loop instance */
-extern struct ev_loop *nw_default_loop;
+    /* initialization the event loop */
+    void nw_loop_init(void);
 
-/* initialization the event loop */
-void nw_loop_init(void);
+    /* start event loop */
+    void nw_loop_run(void);
 
-/* start event loop */
-void nw_loop_run(void);
+    /* break event loop */
+    void nw_loop_break(void);
 
-/* break event loop */
-void nw_loop_break(void);
-
-/* break event loop after specail seconds */
-void nw_loop_break_later(double waittime);
-
+    /* break event loop after specail seconds */
+    void nw_loop_break_later(double waittime);
+#ifdef __cplusplus
+}
+#endif
 # endif
 

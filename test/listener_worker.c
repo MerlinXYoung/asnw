@@ -33,11 +33,11 @@ int outer_decode_pkg(nw_ses *ses, void *data, size_t max)
 
 int outer_on_accept(nw_ses *ses, int sockfd, nw_addr_t *peer_addr)
 {
-    if (inner_svr->clt_count == 0) {
+    if (inner_svr->clt_cnt == 0) {
         printf("worker: %d, no available worker\n", worker_id);
         return -1;
     }
-    int worker = rand() % inner_svr->clt_count;
+    int worker = rand() % inner_svr->clt_cnt;
     nw_ses *curr = inner_svr->clt_list_head;
     for (int i = 0; i < worker && curr != NULL; ++i) {
         curr = curr->next;

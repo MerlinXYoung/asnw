@@ -6,7 +6,7 @@
 # include <stdlib.h>
 # include <unistd.h>
 # include <assert.h>
-
+#include "nw_mem.h"
 # include "nw_job.h"
 # include "nw_sock.h"
 
@@ -24,7 +24,7 @@ static void *thread_routine(void *data)
 
     for (;;) {
         pthread_mutex_lock(&job->lock);
-        while ((job->request_count == 0) && (!job->shutdown)) {
+        while ((job->request_cnt == 0) && (!job->shutdown)) {
             pthread_cond_wait(&job->notify, &job->lock);
         }
         if (job->shutdown) {
@@ -38,7 +38,7 @@ static void *thread_routine(void *data)
         } else {
             job->request_tail = NULL;
         }
-        job->request_count -= 1;
+        --job->request_cnt ;
         pthread_mutex_unlock(&job->lock);
 
         job->type.on_job(entry, privdata);
@@ -55,7 +55,7 @@ static void *thread_routine(void *data)
             job->reply_head = entry;
             job->reply_tail = entry;
         }
-        job->reply_count += 1;
+        ++job->reply_cnt;
         write(job->pipefd[1], " ", 1);
         pthread_mutex_unlock(&job->lock);
     }
@@ -76,7 +76,7 @@ static void on_can_read(struct ev_loop *loop, ev_io *watcher, int events)
 
     for (;;) {
         pthread_mutex_lock(&job->lock);
-        if (job->reply_count == 0) {
+        if (job->reply_cnt == 0) {
             pthread_mutex_unlock(&job->lock);
             break;
         }
@@ -87,14 +87,14 @@ static void on_can_read(struct ev_loop *loop, ev_io *watcher, int events)
         } else {
             job->reply_tail = NULL;
         }
-        job->reply_count -= 1;
+        --job->reply_cnt ;
         pthread_mutex_unlock(&job->lock);
 
         if (job->type.on_finish)
             job->type.on_finish(entry);
         if (job->type.on_cleanup)
             job->type.on_cleanup(entry);
-        nw_cache_free(job->cache, entry);
+        free( entry);
     }
 }
 
@@ -107,7 +107,7 @@ static void nw_job_free(nw_job *job)
     free(job);
 }
 
-nw_job *nw_job_create(nw_job_type *type, int thread_count)
+nw_job *nw_job_create(nw_job_type *type, int thread_cnt)
 {
     if (!type->on_job)
         return NULL;
@@ -130,14 +130,9 @@ nw_job *nw_job_create(nw_job_type *type, int thread_count)
         free(job);
         return NULL;
     }
-    job->thread_count = thread_count;
-    job->threads = calloc(job->thread_count, sizeof(pthread_t));
+    job->thread_cnt = thread_cnt;
+    job->threads = calloc(job->thread_cnt, sizeof(pthread_t));
     if (job->threads == NULL) {
-        nw_job_free(job);
-        return NULL;
-    }
-    job->cache = nw_cache_create(sizeof(nw_job_entry));
-    if (job->cache == NULL) {
         nw_job_free(job);
         return NULL;
     }
@@ -150,13 +145,13 @@ nw_job *nw_job_create(nw_job_type *type, int thread_count)
     ev_io_init(&job->ev, on_can_read, job->pipefd[0], EV_READ);
     ev_io_start(job->loop, &job->ev);
 
-    for (int i = 0; i < job->thread_count; ++i) {
-        struct thread_arg *arg = malloc(sizeof(struct thread_arg));
+    for (int i = 0; i < job->thread_cnt; ++i) {
+        struct thread_arg *arg = calloc(1, sizeof(struct thread_arg));
         if (arg == NULL) {
             nw_job_release(job);
             return NULL;
         }
-        memset(arg, 0, sizeof(struct thread_arg));
+
         arg->job = job;
         if (job->type.on_init) {
             arg->privdata = job->type.on_init();
@@ -177,7 +172,7 @@ nw_job *nw_job_create(nw_job_type *type, int thread_count)
 
 int nw_job_add(nw_job *job, uint32_t id, void *request)
 {
-    nw_job_entry *entry = nw_cache_alloc(job->cache);
+    nw_job_entry *entry = calloc(1, sizeof(nw_job_entry));
     if (entry == NULL)
         return -1;
     memset(entry, 0, sizeof(nw_job_entry));
@@ -196,7 +191,7 @@ int nw_job_add(nw_job *job, uint32_t id, void *request)
         job->request_head = entry;
         job->request_tail = entry;
     }
-    job->request_count += 1;
+    ++job->request_cnt;
     pthread_cond_signal(&job->notify);
     pthread_mutex_unlock(&job->lock);
 

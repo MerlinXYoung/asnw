@@ -6,8 +6,67 @@
 # include <stdio.h>
 # include <errno.h>
 # include <unistd.h>
-
+#include "nw_mem.h"
 # include "nw_ses.h"
+#include "nw_utils.h"
+ /* nw_buf is the basic instance of buf, with limit size */
+typedef struct nw_buf {
+    uint32_t size;
+    uint32_t rpos;
+    uint32_t wpos;
+    struct nw_buf* next;
+    char data[];
+} nw_buf;
+
+/* nw_buf operation */
+static FORCE_INLINE size_t _buf_size(nw_buf* buf) {
+    return buf->wpos - buf->rpos;
+}
+static FORCE_INLINE size_t _buf_avail(nw_buf* buf) {
+    return buf->size - buf->wpos;
+}
+static FORCE_INLINE char* _buf_wptr(nw_buf* buf) {
+    return buf->data + buf->wpos;
+}
+static FORCE_INLINE char* _buf_rptr(nw_buf* buf) {
+    return buf->data + buf->rpos;
+}
+
+
+static FORCE_INLINE size_t _buf_write(nw_buf* buf, const void* data, size_t len)
+{
+    size_t available = _buf_avail(buf);
+    size_t wlen = len > available ? available : len;
+    memcpy(_buf_wptr(buf), data, wlen);
+    buf->wpos += wlen;
+    return wlen;
+}
+
+static FORCE_INLINE void _buf_shift(nw_buf* buf)
+{
+    if (buf->rpos == buf->wpos) {
+        buf->rpos = buf->wpos = 0;
+    }
+    else if (buf->rpos != 0) {
+        memmove(buf->data, _buf_rptr(buf), buf->wpos - buf->rpos);
+        buf->wpos -= buf->rpos;
+        buf->rpos = 0;
+    }
+}
+
+static FORCE_INLINE nw_buf* _buf_alloc(uint32_t size)
+{
+    nw_buf* buf = (nw_buf*)malloc(sizeof(nw_buf) + size);
+    buf->size = size;
+    buf->rpos = 0;
+    buf->wpos = 0;
+    buf->next = NULL;
+    return buf;
+}
+
+static size_t _wlist_write(nw_ses* ses, const void* data, size_t len);
+static size_t _wlist_append(nw_ses* ses, const void* data, size_t len);
+static void _wlist_shift(nw_ses* ses);
 
 static void libev_on_read_write_evt(struct ev_loop *loop, ev_io *watcher, int events);
 static void libev_on_accept_evt(struct ev_loop *loop, ev_io *watcher, int events);
@@ -95,9 +154,9 @@ static void on_can_read(nw_ses *ses)
 {
     if (ses->sockfd < 0)
         return;
-    if (ses->read_buf == NULL) {
-        ses->read_buf = nw_buf_alloc(ses->pool);
-        if (ses->read_buf == NULL) {
+    if (ses->rbuf == NULL) {
+        ses->rbuf = _buf_alloc(ses->buf_limit);
+        if (ses->rbuf == NULL) {
             ses->on_error(ses, "no recv buf");
             return;
         }
@@ -107,7 +166,7 @@ static void on_can_read(nw_ses *ses)
     case SOCK_STREAM:
         {
             while (true) {
-                int ret = read(ses->sockfd, ses->read_buf->data + ses->read_buf->wpos, nw_buf_avail(ses->read_buf));
+                int ret = read(ses->sockfd, _buf_wptr(ses->rbuf), _buf_avail(ses->rbuf));
                 if (ret < 0) {
                     if (errno == EINTR) {
                         continue;
@@ -123,25 +182,25 @@ static void on_can_read(nw_ses *ses)
                     ses->on_close(ses);
                     return;
                 } else {
-                    ses->read_buf->wpos += ret;
+                    ses->rbuf->wpos += ret;
                 }
 
                 size_t size = 0;
-                while ((size = nw_buf_size(ses->read_buf)) > 0) {
-                    ret = ses->decode_pkg(ses, ses->read_buf->data + ses->read_buf->rpos, size);
+                while ((size = _buf_size(ses->rbuf)) > 0) {
+                    ret = ses->decode_pkg(ses, _buf_rptr(ses->rbuf), size);
                     if (ret < 0) {
                         char errmsg[100];
                         snprintf(errmsg, sizeof(errmsg), "decode msg error: %d", ret);
                         ses->on_error(ses, errmsg);
                         return;
                     } else if (ret > 0) {
-                        ses->on_recv_pkg(ses, ses->read_buf->data + ses->read_buf->rpos, ret);
-                        if (!ses->read_buf)
+                        ses->on_recv_pkg(ses, _buf_rptr(ses->rbuf), ret);
+                        if (!ses->rbuf)
                             return;
-                        ses->read_buf->rpos += ret;
+                        ses->rbuf->rpos += ret;
                     } else {
-                        nw_buf_shift(ses->read_buf);
-                        if (ses->read_buf->wpos == ses->read_buf->size) {
+                        _buf_shift(ses->rbuf);
+                        if (ses->rbuf->wpos == ses->rbuf->size) {
                             ses->on_error(ses, "decode msg error");
                             return;
                         }
@@ -149,18 +208,18 @@ static void on_can_read(nw_ses *ses)
                     }
                 }
 
-                nw_buf_shift(ses->read_buf);
+                _buf_shift(ses->rbuf);
             }
-            if (nw_buf_size(ses->read_buf) == 0) {
-                nw_buf_free(ses->pool, ses->read_buf);
-                ses->read_buf = NULL;
+            if (_buf_size(ses->rbuf) == 0) {
+                free(ses->rbuf);
+                ses->rbuf = NULL;
             }
         }
         break;
     case SOCK_DGRAM:
         {
             while (true) {
-                int ret = recvfrom(ses->sockfd, ses->read_buf->data, ses->read_buf->size, 0, \
+                int ret = recvfrom(ses->sockfd, ses->rbuf->data, ses->rbuf->size, 0, \
                         NW_SOCKADDR(&ses->peer_addr), &ses->peer_addr.addrlen);
                 if (ret < 0) {
                     if (errno == EINTR) {
@@ -175,19 +234,19 @@ static void on_can_read(nw_ses *ses)
                     }
                 }
                 int pkg_size = ret;
-                ret = ses->decode_pkg(ses, ses->read_buf->data, pkg_size);
+                ret = ses->decode_pkg(ses, ses->rbuf->data, pkg_size);
                 if (ret < 0) {
                     char errmsg[100];
                     snprintf(errmsg, sizeof(errmsg), "decode msg error: %d", ret);
                     ses->on_error(ses, errmsg);
                     return;
                 }
-                ses->on_recv_pkg(ses, ses->read_buf->data, ret);
-                if (!ses->read_buf)
+                ses->on_recv_pkg(ses, ses->rbuf->data, ret);
+                if (!ses->rbuf)
                     return;
             }
-            nw_buf_free(ses->pool, ses->read_buf);
-            ses->read_buf = NULL;
+            free(ses->rbuf);
+            ses->rbuf = NULL;
         }
         break;
     case SOCK_SEQPACKET:
@@ -198,8 +257,8 @@ static void on_can_read(nw_ses *ses)
                 char control[CMSG_SPACE(sizeof(int))];
 
                 memset(&msg, 0, sizeof(msg));
-                io.iov_base = ses->read_buf->data;
-                io.iov_len = ses->read_buf->size;
+                io.iov_base = ses->rbuf->data;
+                io.iov_len = ses->rbuf->size;
                 msg.msg_iov = &io;
                 msg.msg_iovlen = 1;
                 msg.msg_control = control;
@@ -230,20 +289,20 @@ static void on_can_read(nw_ses *ses)
                     }
                 } else {
                     int pkg_size = ret;
-                    ret = ses->decode_pkg(ses, ses->read_buf->data, pkg_size);
+                    ret = ses->decode_pkg(ses, ses->rbuf->data, pkg_size);
                     if (ret < 0) {
                         char errmsg[100];
                         snprintf(errmsg, sizeof(errmsg), "decode msg error: %d", ret);
                         ses->on_error(ses, errmsg);
                         return;
                     }
-                    ses->on_recv_pkg(ses, ses->read_buf->data, ret);
-                    if (!ses->read_buf)
+                    ses->on_recv_pkg(ses, ses->rbuf->data, ret);
+                    if (!ses->rbuf)
                         return;
                 }
             }
-            nw_buf_free(ses->pool, ses->read_buf);
-            ses->read_buf = NULL;
+            free(ses->rbuf);
+            ses->rbuf = NULL;
         }
         break;
     }
@@ -254,14 +313,14 @@ static void on_can_write(nw_ses *ses)
     if (ses->sockfd < 0)
         return;
 
-    while (ses->write_buf->count > 0) {
-        nw_buf *buf = ses->write_buf->head;
-        size_t size = nw_buf_size(buf);
+    while (ses->wlist_cnt > 0) {
+        nw_buf *buf = ses->wlist_head;
+        size_t size = _buf_size(buf);
         int nwrite = 0;
         if (ses->sock_type == SOCK_STREAM) {
-            nwrite = nw_write_stream(ses, buf->data + buf->rpos, size);
+            nwrite = nw_write_stream(ses, _buf_rptr(buf), size);
         } else {
-            nwrite = nw_write_packet(ses, buf->data + buf->rpos, size);
+            nwrite = nw_write_packet(ses, _buf_rptr(buf), size);
         }
         if (nwrite < size) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -278,11 +337,11 @@ static void on_can_write(nw_ses *ses)
                 return;
             }
         } else {
-            nw_buf_list_shift(ses->write_buf);
+            _wlist_shift(ses);
         }
     }
 
-    if (ses->write_buf->count == 0) {
+    if (ses->wlist_cnt == 0) {
         watch_read(ses);
     }
 }
@@ -295,7 +354,7 @@ static void on_can_accept(nw_ses *ses)
     while (true) {
         nw_addr_t peer_addr;
         memset(&peer_addr, 0, sizeof(peer_addr));
-        peer_addr.family = ses->host_addr->family;
+        peer_addr.s_family = ses->host_addr->s_family;
         peer_addr.addrlen = ses->host_addr->addrlen;
         int sockfd = accept(ses->sockfd, NW_SOCKADDR(&peer_addr), &peer_addr.addrlen);
         if (sockfd < 0) {
@@ -357,15 +416,19 @@ static void libev_on_connect_evt(struct ev_loop *loop, ev_io *watcher, int event
 
 int nw_ses_bind(nw_ses *ses, nw_addr_t *addr)
 {
-    if (addr->family == AF_UNIX) {
+#ifdef _NW_USE_UN_
+    if (addr->s_family == AF_UNIX) {
         unlink(addr->un.sun_path);
     }
+#endif
     int ret = bind(ses->sockfd, NW_SOCKADDR(addr), addr->addrlen);
     if (ret < 0)
         return ret;
-    if (addr->family == AF_UNIX) {
+#ifdef _NW_USE_UN_
+    if (addr->s_family == AF_UNIX) {
         return nw_sock_set_mode(addr, 0777);
     }
+#endif
     return 0;
 }
 
@@ -417,12 +480,12 @@ int nw_ses_send(nw_ses *ses, const void *data, size_t size)
         return -1;
     }
 
-    if (ses->write_buf->count > 0) {
+    if (ses->wlist_cnt > 0) {
         size_t nwrite;
         if (ses->sock_type == SOCK_STREAM) {
-            nwrite = nw_buf_list_write(ses->write_buf, data, size);
+            nwrite = _wlist_write(ses, data, size);
         } else {
-            nwrite = nw_buf_list_append(ses->write_buf, data, size);
+            nwrite = _wlist_append(ses, data, size);
         }
         if (nwrite != size) {
             ses->on_error(ses, "no send buf");
@@ -435,7 +498,7 @@ int nw_ses_send(nw_ses *ses, const void *data, size_t size)
                 int nwrite = nw_write_stream(ses, data, size);
                 if (nwrite < size) {
                     if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                        if (nw_buf_list_write(ses->write_buf, data + nwrite, size - nwrite) != (size - nwrite)) {
+                        if (_wlist_write(ses, data + nwrite, size - nwrite) != (size - nwrite)) {
                             ses->on_error(ses, "no send buf");
                             return -1;
                         }
@@ -465,7 +528,7 @@ int nw_ses_send(nw_ses *ses, const void *data, size_t size)
                 int ret = nw_write_packet(ses, data, size);
                 if (ret < 0) {
                     if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                        if (nw_buf_list_append(ses->write_buf, data, size) != size) {
+                        if (_wlist_append(ses, data, size) != size) {
                             ses->on_error(ses, "on send buf");
                             return -1;
                         }
@@ -514,16 +577,13 @@ int nw_ses_send_fd(nw_ses *ses, int fd)
     return sendmsg(ses->sockfd, &msg, MSG_EOR);
 }
 
-int nw_ses_init(nw_ses *ses, struct ev_loop *loop, nw_buf_pool *pool, uint32_t buf_limit, int ses_type)
+int nw_ses_init(nw_ses *ses, struct ev_loop *loop, uint32_t buf_limit, uint32_t wlist_limit, int ses_type)
 {
     memset(ses, 0, sizeof(nw_ses));
     ses->loop = loop;
     ses->ses_type = ses_type;
-    ses->pool = pool;
-    ses->write_buf = nw_buf_list_create(pool, buf_limit);
-    if (ses->write_buf == NULL) {
-        return -1;
-    }
+    ses->buf_limit = buf_limit;
+    ses->wlist_limit = wlist_limit;
 
     return 0;
 }
@@ -536,13 +596,13 @@ int nw_ses_close(nw_ses *ses)
         close(ses->sockfd);
         ses->sockfd = -1;
     }
-    if (ses->read_buf) {
-        nw_buf_free(ses->pool, ses->read_buf);
-        ses->read_buf = NULL;
+    if (ses->rbuf) {
+        free(ses->rbuf);
+        ses->rbuf = NULL;
     }
-    if (ses->write_buf) {
-        while (ses->write_buf->count) {
-            nw_buf_list_shift(ses->write_buf);
+    if (ses) {
+        while (ses->wlist_cnt) {
+            _wlist_shift(ses);
         }
     }
 
@@ -552,11 +612,76 @@ int nw_ses_close(nw_ses *ses)
 int nw_ses_release(nw_ses *ses)
 {
     nw_ses_close(ses);
-    if (ses->write_buf) {
-        nw_buf_list_release(ses->write_buf);
-        ses->write_buf = NULL;
-    }
+    //if (ses) {
+    //    nw_buf_list_release(ses);
+    //    ses = NULL;
+    //}
 
     return 0;
 }
 
+static size_t _wlist_write(nw_ses* ses, const void* data, size_t len)
+{
+    const void* pos = data;
+    size_t left = len;
+
+    if (ses->wlist_tail && _buf_avail(ses->wlist_tail)) {
+        size_t ret = _buf_write(ses->wlist_tail, pos, left);
+        left -= ret;
+        pos += ret;
+    }
+
+    while (left) {
+        if (ses->wlist_limit && ses->wlist_cnt >= ses->wlist_limit)
+            return len - left;
+        nw_buf* buf = _buf_alloc(ses->buf_limit);
+        if (buf == NULL)
+            return len - left;
+        if (ses->wlist_head == NULL)
+            ses->wlist_head = buf;
+        if (ses->wlist_tail != NULL)
+            ses->wlist_tail->next = buf;
+        ses->wlist_tail = buf;
+        ++ses->wlist_cnt;
+        size_t ret = _buf_write(ses->wlist_tail, pos, left);
+        left -= ret;
+        pos += ret;
+    }
+
+    return len;
+}
+
+static size_t _wlist_append(nw_ses* ses, const void* data, size_t len)
+{
+    if (ses->wlist_limit && ses->wlist_cnt >= ses->wlist_limit)
+        return 0;
+    nw_buf* buf = _buf_alloc(ses->buf_limit);
+    if (buf == NULL)
+        return 0;
+    if (len > buf->size) {
+        free(buf);
+        return 0;
+    }
+    _buf_write(buf, data, len);
+    if (ses->wlist_head == NULL)
+        ses->wlist_head = buf;
+    if (ses->wlist_tail != NULL)
+        ses->wlist_tail->next = buf;
+    ses->wlist_tail = buf;
+    ++ses->wlist_cnt;
+
+    return len;
+}
+
+static void _wlist_shift(nw_ses* ses)
+{
+    if (ses->wlist_head) {
+        nw_buf* tmp = ses->wlist_head;
+        ses->wlist_head = tmp->next;
+        if (ses->wlist_head == NULL) {
+            ses->wlist_tail = NULL;
+        }
+        --ses->wlist_cnt;
+        free(tmp);
+    }
+}

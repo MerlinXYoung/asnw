@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+mkdir -p build/3rd
+cd build/3rd
+cmake ../../3rd
+make

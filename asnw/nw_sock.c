@@ -10,26 +10,28 @@
 # include <fcntl.h>
 # include <netdb.h>
 # include <unistd.h>
-
+#include "nw_mem.h"
 # include "nw_sock.h"
 
-char *nw_sock_human_addr(nw_addr_t *addr)
+const char *nw_sock_human_addr(const nw_addr_t *addr)
 {
     static char str[128];
     char ip[INET6_ADDRSTRLEN];
 
-    switch (addr->family) {
+    switch (addr->s_family) {
     case AF_INET:
-        inet_ntop(addr->family, &addr->in.sin_addr, ip, sizeof(ip));
+        inet_ntop(addr->s_family, &addr->in.sin_addr, ip, sizeof(ip));
         snprintf(str, sizeof(str), "%s:%u", ip, ntohs(addr->in.sin_port));
         break;
     case AF_INET6:
-        inet_ntop(addr->family, &addr->in6.sin6_addr, ip, sizeof(ip));
+        inet_ntop(addr->s_family, &addr->in6.sin6_addr, ip, sizeof(ip));
         snprintf(str, sizeof(str), "%s:%u", ip, ntohs(addr->in6.sin6_port));
         break;
+#ifdef _NW_USE_UN_
     case AF_UNIX:
         snprintf(str, sizeof(str), "%s:%s", "unix", (addr->un.sun_path));
         break;
+#endif
     default:
         str[0] = 0;
         break;
@@ -38,22 +40,24 @@ char *nw_sock_human_addr(nw_addr_t *addr)
     return str;
 }
 
-char *nw_sock_human_addr_s(nw_addr_t *addr, char *dest)
+const char *nw_sock_human_addr_s(const nw_addr_t *addr, char *dest)
 {
     char ip[INET6_ADDRSTRLEN];
 
-    switch (addr->family) {
+    switch (addr->s_family) {
     case AF_INET:
-        inet_ntop(addr->family, &addr->in.sin_addr, ip, sizeof(ip));
+        inet_ntop(addr->s_family, &addr->in.sin_addr, ip, sizeof(ip));
         snprintf(dest, NW_HUMAN_ADDR_SIZE, "%s:%u", ip, ntohs(addr->in.sin_port));
         break;
     case AF_INET6:
-        inet_ntop(addr->family, &addr->in6.sin6_addr, ip, sizeof(ip));
+        inet_ntop(addr->s_family, &addr->in6.sin6_addr, ip, sizeof(ip));
         snprintf(dest, NW_HUMAN_ADDR_SIZE, "%s:%u", ip, ntohs(addr->in6.sin6_port));
         break;
+#ifdef _NW_USE_UN_
     case AF_UNIX:
         snprintf(dest, NW_HUMAN_ADDR_SIZE, "%s:%s", "unix", (addr->un.sun_path));
         break;
+#endif
     default:
         dest[0] = 0;
         break;
@@ -62,15 +66,15 @@ char *nw_sock_human_addr_s(nw_addr_t *addr, char *dest)
     return dest;
 }
 
-char *nw_sock_ip(nw_addr_t *addr)
+const char *nw_sock_ip(const nw_addr_t *addr)
 {
     static char ip[INET6_ADDRSTRLEN];
-    switch (addr->family) {
+    switch (addr->s_family) {
     case AF_INET:
-        inet_ntop(addr->family, &addr->in.sin_addr, ip, sizeof(ip));
+        inet_ntop(addr->s_family, &addr->in.sin_addr, ip, sizeof(ip));
         break;
     case AF_INET6:
-        inet_ntop(addr->family, &addr->in6.sin6_addr, ip, sizeof(ip));
+        inet_ntop(addr->s_family, &addr->in6.sin6_addr, ip, sizeof(ip));
         break;
     default:
         ip[0] = 0;
@@ -79,14 +83,14 @@ char *nw_sock_ip(nw_addr_t *addr)
     return ip;
 }
 
-char *nw_sock_ip_s(nw_addr_t *addr, char *ip)
+const char *nw_sock_ip_s(const nw_addr_t *addr, char *ip)
 {
-    switch (addr->family) {
+    switch (addr->s_family) {
     case AF_INET:
-        inet_ntop(addr->family, &addr->in.sin_addr, ip, NW_SOCK_IP_SIZE);
+        inet_ntop(addr->s_family, &addr->in.sin_addr, ip, NW_SOCK_IP_SIZE);
         break;
     case AF_INET6:
-        inet_ntop(addr->family, &addr->in6.sin6_addr, ip, NW_SOCK_IP_SIZE);
+        inet_ntop(addr->s_family, &addr->in6.sin6_addr, ip, NW_SOCK_IP_SIZE);
         break;
     default:
         ip[0] = 0;
@@ -94,20 +98,24 @@ char *nw_sock_ip_s(nw_addr_t *addr, char *ip)
     }
     return ip;
 }
-
+#ifdef _NW_USE_UN_
 int nw_sock_set_mode(nw_addr_t *addr, mode_t mode)
 {
-    if (addr->family != AF_UNIX)
+    if (addr->s_family != AF_UNIX)
         return 0;
     return chmod(addr->un.sun_path, mode);
 }
-
+#endif
 int nw_sock_peer_addr(int sockfd, nw_addr_t *addr)
 {
+#ifdef _NW_USE_UN_
     addr->addrlen = sizeof(addr->un);
+#else
+    addr->addrlen = sizeof(addr->in6);
+#endif
     if (getpeername(sockfd, NW_SOCKADDR(addr), &addr->addrlen) == 0)
     {
-        addr->family = NW_SOCKADDR(addr)->sa_family;
+        addr->s_family = NW_SOCKADDR(addr)->sa_family;
         return 0;
     }
     return -1;
@@ -115,10 +123,14 @@ int nw_sock_peer_addr(int sockfd, nw_addr_t *addr)
 
 int nw_sock_host_addr(int sockfd, nw_addr_t *addr)
 {
+#ifdef _NW_USE_UN_
     addr->addrlen = sizeof(addr->un);
+#else
+    addr->addrlen = sizeof(addr->in6);
+#endif
     if (getsockname(sockfd, NW_SOCKADDR(addr), &addr->addrlen) == 0)
     {
-        addr->family = NW_SOCKADDR(addr)->sa_family;
+        addr->s_family = NW_SOCKADDR(addr)->sa_family;
         return 0;
     }
     return -1;
@@ -133,7 +145,7 @@ static int nw_sock_addr_fill_inet(nw_addr_t *addr, const char *host, const char 
             return -1;
         }
         addr->in.sin_port = htons(strtoul(port, NULL, 0));
-        addr->family = addr->in.sin_family;
+        addr->s_family = addr->in.sin_family;
         addr->addrlen = sizeof(addr->in);
     } else {
         addr->in6.sin6_family = AF_INET6;
@@ -141,14 +153,14 @@ static int nw_sock_addr_fill_inet(nw_addr_t *addr, const char *host, const char 
             return -1;
         }
         addr->in6.sin6_port = htons(strtoul(port, NULL, 0));
-        addr->family = addr->in6.sin6_family;
+        addr->s_family = addr->in6.sin6_family;
         addr->addrlen = sizeof(addr->in6);
     }
 
     return 0;
 }
-
-int nw_sock_addr_fill_unix(nw_addr_t *addr, const char* unix_path)
+#ifdef _NW_USE_UN_
+static int nw_sock_addr_fill_unix(nw_addr_t *addr, const char* unix_path)
 {
     size_t pathlen = strlen(unix_path);
     if (pathlen >= sizeof(addr->un.sun_path)) {
@@ -156,12 +168,12 @@ int nw_sock_addr_fill_unix(nw_addr_t *addr, const char* unix_path)
     }
     addr->un.sun_family = AF_UNIX;
     strcpy(addr->un.sun_path, unix_path);
-    addr->family = addr->un.sun_family;
+    addr->s_family = addr->un.sun_family;
     addr->addrlen = sizeof(addr->un);
 
     return 0;
 }
-
+#endif
 int nw_sock_cfg_parse(const char *cfg, nw_addr_t *addr, int *sock_type)
 {
     char *s = strdup(cfg);
@@ -206,10 +218,14 @@ int nw_sock_cfg_parse(const char *cfg, nw_addr_t *addr, int *sock_type)
             return -4;
         }
     } else {
+#ifdef _NW_USE_UN_
         if (nw_sock_addr_fill_unix(addr, name) < 0) {
             free(s);
             return -5;
         }
+#else 
+        return -5;
+#endif
     }
 
     free(s);

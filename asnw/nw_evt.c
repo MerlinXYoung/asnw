@@ -7,7 +7,7 @@
 # include <unistd.h>
 # include <limits.h>
 # include <libgen.h>
-
+#include "nw_mem.h"
 # include "nw_evt.h"
 
 struct ev_loop *nw_default_loop;
@@ -35,7 +35,8 @@ void nw_loop_init(void)
     flag |= EVFLAG_AUTO;
     flag |= EVFLAG_NOENV;
     flag |= EVFLAG_FORKCHECK;
-    nw_default_loop = ev_loop_new(flag);
+    //nw_default_loop = ev_loop_new(flag);
+    nw_default_loop = ev_default_loop(flag);
     ev_set_syserr_cb(fatal_error);
     initialized = 1;
 }

@@ -5,7 +5,7 @@
 
 # include <stdlib.h>
 # include <stdbool.h>
-
+#include "nw_mem.h"
 # include "nw_state.h"
 
 # define NW_STATE_HASH_TABLE_INIT_SIZE 64
@@ -24,16 +24,10 @@ nw_state *nw_state_create(nw_state_type *type, uint32_t data_size)
     context->loop = nw_default_loop;
     context->type = *type;
     context->data_size = data_size;
-    context->cache = nw_cache_create(sizeof(nw_state_entry) + data_size);
-    if (context->cache == NULL) {
-        free(context);
-        return NULL;
-    }
     context->table_size = NW_STATE_HASH_TABLE_INIT_SIZE;
     context->table_mask = context->table_size - 1;
     context->table = calloc(context->table_size, sizeof(nw_state_entry *));
     if (context->table == NULL) {
-        nw_cache_release(context->cache);
         free(context);
         return NULL;
     }
@@ -77,7 +71,6 @@ static void state_release(nw_state *context, nw_state_entry *entry)
 {
     if (context->type.on_release)
         context->type.on_release(entry);
-    nw_cache_free(context->cache, entry);
 }
 
 static void state_remove(nw_state *context, nw_state_entry *entry)
@@ -127,7 +120,7 @@ nw_state_entry *nw_state_add(nw_state *context, double timeout, uint32_t id)
         return NULL;
     if (context->used == UINT32_MAX)
         return NULL;
-    nw_state_entry *entry = nw_cache_alloc(context->cache);
+    nw_state_entry *entry = calloc(1,sizeof(nw_state_entry));
     if (entry == NULL) {
         return NULL;
     }
@@ -205,7 +198,6 @@ void nw_state_release(nw_state *context)
             entry = next;
         }
     }
-    nw_cache_release(context->cache);
     free(context->table);
     free(context);
 }

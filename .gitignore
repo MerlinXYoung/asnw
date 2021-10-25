@@ -1,3 +1,14 @@
+# VS
+.vs
+out
+CMakeSettings.json
+
+# VS Code
+.vscode
+
+3rd
+!3rd/CMakeLists.txt
+
 # Object files
 *.o
 *.ko
