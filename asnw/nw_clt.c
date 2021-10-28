@@ -183,20 +183,20 @@ nw_clt *nw_clt_create(nw_clt_cfg *cfg, nw_clt_type *type, void *privdata)
     clt->read_mem = cfg->read_mem;
     clt->write_mem = cfg->write_mem;
 
-    nw_addr_t *host_addr = malloc(sizeof(nw_addr_t));
+    nw_sockaddr *host_addr = malloc(sizeof(nw_sockaddr));
     if (host_addr == NULL) {
         nw_clt_release(clt);
         return NULL;
     }
-    memset(host_addr, 0, sizeof(nw_addr_t));
+    memset(host_addr, 0, sizeof(nw_sockaddr));
     host_addr->s_family = cfg->addr.s_family;
-    host_addr->addrlen = cfg->addr.addrlen;
+    //host_addr->addrlen = cfg->addr.addrlen;
 
     if (nw_ses_init(&clt->ses, nw_default_loop, cfg->max_pkg_size, cfg->buf_limit, NW_SES_TYPE_CLIENT) < 0) {
         nw_clt_release(clt);
         return NULL;
     }
-    memcpy(&clt->ses.peer_addr, &cfg->addr, sizeof(nw_addr_t));
+    memcpy(&clt->ses.peer_addr, &cfg->addr, sizeof(nw_sockaddr));
     clt->ses.host_addr   = host_addr;
     clt->ses.sockfd      = -1;
     clt->ses.sock_type   = cfg->sock_type;

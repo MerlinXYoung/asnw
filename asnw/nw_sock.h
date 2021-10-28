@@ -14,40 +14,58 @@
 # include <arpa/inet.h>
 # include <netinet/in.h>
 # include <netinet/tcp.h>
+# include "nw_utils.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
-    /* nw_addr_t is a abstract addr type, hide the difference between different sock type */
-    typedef struct nw_addr_t {
-        unsigned int addrlen;
+    /* nw_sockaddr is a abstract addr type, hide the difference between different sock type */
+    typedef struct nw_sockaddr {
+        //unsigned int addrlen;
         union {
             __SOCKADDR_COMMON(s_);
+            struct sockaddr s;
             struct sockaddr_in  in;
             struct sockaddr_in6 in6;
 #ifdef _NW_USE_UN_
             struct sockaddr_un  un;
 #endif
         };
-    } nw_addr_t;
+    } nw_sockaddr;
 
-# define NW_SOCKADDR(addr) ((struct sockaddr *)(&(addr)->in))
+    socklen_t FORCE_INLINE nw_sockaddr_len(nw_sockaddr* addr) {
+        switch (addr->s_family) {
+        case AF_INET:
+            return sizeof(addr->in);
+        case AF_INET6:
+            return sizeof(addr->in6);
+#ifdef _NW_USE_UN_
+        case AF_UNIX:
+            return sizeof(addr->un);
+#endif
+        default:
+            return sizeof(*addr);
+        }
+    }
+
+
+# define NW_SOCKADDR(addr) (&(addr)->s)
 # define NW_HUMAN_ADDR_SIZE 128
 # define NW_SOCK_IP_SIZE    INET6_ADDRSTRLEN
 
-    /* convert nw_addr_t addr to a human readable string */
-    const char* nw_sock_human_addr(const nw_addr_t* addr);
+    /* convert nw_sockaddr addr to a human readable string */
+    const char* nw_sock_human_addr(const nw_sockaddr* addr);
 
     /* nw_sock_human_addr thead safe version, dest should at least NW_HUMAN_ADDR_SIZE len */
-    const char* nw_sock_human_addr_s(const nw_addr_t* addr, char* dest);
+    const char* nw_sock_human_addr_s(const nw_sockaddr* addr, char* dest);
 
     /* if addr family is AF_INET or AF_INET6, return ip string, else return empty string */
-    const char* nw_sock_ip(const nw_addr_t* addr);
+    const char* nw_sock_ip(const nw_sockaddr* addr);
 
     /* nw_sock_ip thread safe version, ip should at least NW_SOCK_IP_SIZE len */
-    const char* nw_sock_ip_s(const nw_addr_t* addr, char* ip);
+    const char* nw_sock_ip_s(const nw_sockaddr* addr, char* ip);
 #ifdef _NW_USE_UN_
     /* set unix socket mode */
-    int nw_sock_set_mode(nw_addr_t* addr, mode_t mode);
+    int nw_sock_set_mode(nw_sockaddr* addr, mode_t mode);
 #endif
     /*
      * input: cfg, format: protocol@address
@@ -59,13 +77,13 @@ extern "C" {
      * output: addr, sock_type
      * sock_type list: SOCK_STREAM, SOCK_DGRAM, SOCK_SEQPACKET
      */
-    int nw_sock_cfg_parse(const char* cfg, nw_addr_t* addr, int* sock_type);
+    int nw_sock_cfg_parse(const char* cfg, nw_sockaddr* addr, int* sock_type);
 
     /* get sockfd peer addr */
-    int nw_sock_peer_addr(int sockfd, nw_addr_t* addr);
+    int nw_sock_peer_addr(int sockfd, nw_sockaddr* addr);
 
     /* get sockfd host addr */
-    int nw_sock_host_addr(int sockfd, nw_addr_t* addr);
+    int nw_sock_host_addr(int sockfd, nw_sockaddr* addr);
 
     /* get sockfd errno to detect error */
     int nw_sock_errno(int sockfd);

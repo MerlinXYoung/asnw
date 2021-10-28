@@ -13,7 +13,7 @@
 #include "nw_mem.h"
 # include "nw_sock.h"
 
-const char *nw_sock_human_addr(const nw_addr_t *addr)
+const char *nw_sock_human_addr(const nw_sockaddr *addr)
 {
     static char str[128];
     char ip[INET6_ADDRSTRLEN];
@@ -40,7 +40,7 @@ const char *nw_sock_human_addr(const nw_addr_t *addr)
     return str;
 }
 
-const char *nw_sock_human_addr_s(const nw_addr_t *addr, char *dest)
+const char *nw_sock_human_addr_s(const nw_sockaddr *addr, char *dest)
 {
     char ip[INET6_ADDRSTRLEN];
 
@@ -66,7 +66,7 @@ const char *nw_sock_human_addr_s(const nw_addr_t *addr, char *dest)
     return dest;
 }
 
-const char *nw_sock_ip(const nw_addr_t *addr)
+const char *nw_sock_ip(const nw_sockaddr *addr)
 {
     static char ip[INET6_ADDRSTRLEN];
     switch (addr->s_family) {
@@ -83,7 +83,7 @@ const char *nw_sock_ip(const nw_addr_t *addr)
     return ip;
 }
 
-const char *nw_sock_ip_s(const nw_addr_t *addr, char *ip)
+const char *nw_sock_ip_s(const nw_sockaddr *addr, char *ip)
 {
     switch (addr->s_family) {
     case AF_INET:
@@ -99,21 +99,17 @@ const char *nw_sock_ip_s(const nw_addr_t *addr, char *ip)
     return ip;
 }
 #ifdef _NW_USE_UN_
-int nw_sock_set_mode(nw_addr_t *addr, mode_t mode)
+int nw_sock_set_mode(nw_sockaddr *addr, mode_t mode)
 {
     if (addr->s_family != AF_UNIX)
         return 0;
     return chmod(addr->un.sun_path, mode);
 }
 #endif
-int nw_sock_peer_addr(int sockfd, nw_addr_t *addr)
+int nw_sock_peer_addr(int sockfd, nw_sockaddr *addr)
 {
-#ifdef _NW_USE_UN_
-    addr->addrlen = sizeof(addr->un);
-#else
-    addr->addrlen = sizeof(addr->in6);
-#endif
-    if (getpeername(sockfd, NW_SOCKADDR(addr), &addr->addrlen) == 0)
+    socklen_t addrlen = sizeof(nw_sockaddr);
+    if (getpeername(sockfd, NW_SOCKADDR(addr), &addrlen) == 0)
     {
         addr->s_family = NW_SOCKADDR(addr)->sa_family;
         return 0;
@@ -121,14 +117,10 @@ int nw_sock_peer_addr(int sockfd, nw_addr_t *addr)
     return -1;
 }
 
-int nw_sock_host_addr(int sockfd, nw_addr_t *addr)
+int nw_sock_host_addr(int sockfd, nw_sockaddr *addr)
 {
-#ifdef _NW_USE_UN_
-    addr->addrlen = sizeof(addr->un);
-#else
-    addr->addrlen = sizeof(addr->in6);
-#endif
-    if (getsockname(sockfd, NW_SOCKADDR(addr), &addr->addrlen) == 0)
+    socklen_t addrlen = sizeof(nw_sockaddr);
+    if (getsockname(sockfd, NW_SOCKADDR(addr), &addrlen) == 0)
     {
         addr->s_family = NW_SOCKADDR(addr)->sa_family;
         return 0;
@@ -136,9 +128,9 @@ int nw_sock_host_addr(int sockfd, nw_addr_t *addr)
     return -1;
 }
 
-static int nw_sock_addr_fill_inet(nw_addr_t *addr, const char *host, const char *port)
+static int nw_sock_addr_fill_inet(nw_sockaddr *addr, const char *host, const char *port)
 {
-    memset(addr, 0, sizeof(nw_addr_t));
+    memset(addr, 0, sizeof(nw_sockaddr));
     if (strchr(host, '.') != NULL) {
         addr->in.sin_family = AF_INET;
         if (inet_pton(addr->in.sin_family, host, &addr->in.sin_addr) <= 0) {
@@ -146,7 +138,7 @@ static int nw_sock_addr_fill_inet(nw_addr_t *addr, const char *host, const char 
         }
         addr->in.sin_port = htons(strtoul(port, NULL, 0));
         addr->s_family = addr->in.sin_family;
-        addr->addrlen = sizeof(addr->in);
+        //addr->addrlen = sizeof(addr->in);
     } else {
         addr->in6.sin6_family = AF_INET6;
         if (inet_pton(addr->in6.sin6_family, host, &addr->in6.sin6_addr) <= 0) {
@@ -154,13 +146,13 @@ static int nw_sock_addr_fill_inet(nw_addr_t *addr, const char *host, const char 
         }
         addr->in6.sin6_port = htons(strtoul(port, NULL, 0));
         addr->s_family = addr->in6.sin6_family;
-        addr->addrlen = sizeof(addr->in6);
+        //addr->addrlen = sizeof(addr->in6);
     }
 
     return 0;
 }
 #ifdef _NW_USE_UN_
-static int nw_sock_addr_fill_unix(nw_addr_t *addr, const char* unix_path)
+static int nw_sock_addr_fill_unix(nw_sockaddr *addr, const char* unix_path)
 {
     size_t pathlen = strlen(unix_path);
     if (pathlen >= sizeof(addr->un.sun_path)) {
@@ -174,7 +166,7 @@ static int nw_sock_addr_fill_unix(nw_addr_t *addr, const char* unix_path)
     return 0;
 }
 #endif
-int nw_sock_cfg_parse(const char *cfg, nw_addr_t *addr, int *sock_type)
+int nw_sock_cfg_parse(const char *cfg, nw_sockaddr *addr, int *sock_type)
 {
     char *s = strdup(cfg);
     char *sep = strchr(s, '@');

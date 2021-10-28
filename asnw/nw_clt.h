@@ -20,7 +20,7 @@ extern "C" {
 
     typedef struct nw_clt_cfg {
         /* the target server addr */
-        nw_addr_t addr;
+        nw_sockaddr addr;
         /* the target server sock type */
         int sock_type;
         /* max full message size */

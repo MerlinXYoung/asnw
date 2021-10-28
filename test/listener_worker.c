@@ -31,7 +31,7 @@ int outer_decode_pkg(nw_ses *ses, void *data, size_t max)
     return 0;
 }
 
-int outer_on_accept(nw_ses *ses, int sockfd, nw_addr_t *peer_addr)
+int outer_on_accept(nw_ses *ses, int sockfd, nw_sockaddr *peer_addr)
 {
     if (inner_svr->clt_cnt == 0) {
         printf("worker: %d, no available worker\n", worker_id);

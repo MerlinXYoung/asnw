@@ -13,7 +13,7 @@
 typedef struct rpc_clt_cfg {
     char *name;
     uint32_t addr_count;
-    nw_addr_t *addr_arr;
+    nw_sockaddr *addr_arr;
     int sock_type;
     uint32_t read_mem;
     uint32_t write_mem;
@@ -30,7 +30,7 @@ typedef struct rpc_clt {
     nw_clt *raw_clt;
     uint32_t addr_count;
     uint32_t curr_index;
-    nw_addr_t *addr_arr;
+    nw_sockaddr *addr_arr;
     nw_timer timer;
     double last_heartbeat;
     void (*on_recv_pkg)(nw_ses *ses, rpc_pkg *pkg);

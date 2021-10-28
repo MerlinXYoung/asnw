@@ -39,9 +39,9 @@ extern "C" {
             int ses_type : 16;
         };
         /* peer addr */
-        nw_addr_t peer_addr;
+        nw_sockaddr peer_addr;
         /* host addr */
-        nw_addr_t* host_addr;
+        nw_sockaddr* host_addr;
 
         uint32_t buf_limit;
         struct nw_buf* rbuf;
@@ -60,7 +60,7 @@ extern "C" {
 
         int  (*decode_pkg)(struct nw_ses* ses, void* data, size_t max);
         union {
-            int  (*on_accept)(struct nw_ses* ses, int sockfd, nw_addr_t* peer_addr);
+            int  (*on_accept)(struct nw_ses* ses, int sockfd, nw_sockaddr* peer_addr);
             void (*on_connect)(struct nw_ses* ses, bool result);
         };
         void (*on_recv_pkg)(struct nw_ses* ses, void* data, size_t size);
@@ -69,9 +69,9 @@ extern "C" {
         void (*on_close)(struct nw_ses* ses);
     } nw_ses;
 
-    int nw_ses_bind(nw_ses* ses, nw_addr_t* addr);
+    int nw_ses_bind(nw_ses* ses, nw_sockaddr* addr);
     int nw_ses_listen(nw_ses* ses, int backlog);
-    int nw_ses_connect(nw_ses* ses, nw_addr_t* addr);
+    int nw_ses_connect(nw_ses* ses, nw_sockaddr* addr);
 
     int nw_ses_start(nw_ses* ses);
     int nw_ses_stop(nw_ses* ses);

@@ -88,7 +88,7 @@ static void nw_svr_free(nw_svr *svr)
     free(svr);
 }
 
-static int nw_svr_add_clt(nw_ses *ses, int sockfd, nw_addr_t *peer_addr)
+static int nw_svr_add_clt(nw_ses *ses, int sockfd, nw_sockaddr *peer_addr)
 {
     nw_svr *svr = (nw_svr *)ses->svr;
     set_socket_option(svr, sockfd);
@@ -115,7 +115,7 @@ static int nw_svr_add_clt(nw_ses *ses, int sockfd, nw_addr_t *peer_addr)
         }
         return -1;
     }
-    memcpy(&clt->peer_addr, peer_addr, sizeof(nw_addr_t));
+    memcpy(&clt->peer_addr, peer_addr, sizeof(nw_sockaddr));
     clt->host_addr   = ses->host_addr;
     clt->sockfd      = sockfd;
     clt->sock_type   = ses->sock_type;
@@ -153,7 +153,7 @@ static int nw_svr_add_clt(nw_ses *ses, int sockfd, nw_addr_t *peer_addr)
     return 0;
 }
 
-static int on_accept(nw_ses *ses, int sockfd, nw_addr_t *peer_addr)
+static int on_accept(nw_ses *ses, int sockfd, nw_sockaddr *peer_addr)
 {
     nw_svr *svr = (nw_svr *)ses->svr;
     if (svr->type.on_accept) {
@@ -164,7 +164,7 @@ static int on_accept(nw_ses *ses, int sockfd, nw_addr_t *peer_addr)
 
 int nw_svr_add_clt_fd(nw_svr *svr, int fd)
 {
-    nw_addr_t peer_addr;
+    nw_sockaddr peer_addr;
     if (nw_sock_peer_addr(fd, &peer_addr) < 0) {
         return -1;
     }
@@ -219,12 +219,12 @@ nw_svr *nw_svr_create(nw_svr_cfg *cfg, nw_svr_type *type, void *privdata)
             nw_svr_free(svr);
             return NULL;
         }
-        nw_addr_t *host_addr = malloc(sizeof(nw_addr_t));
+        nw_sockaddr *host_addr = malloc(sizeof(nw_sockaddr));
         if (host_addr == NULL) {
             nw_svr_free(svr);
             return NULL;
         }
-        memcpy(host_addr, &cfg->bind_arr[i].addr, sizeof(nw_addr_t));
+        memcpy(host_addr, &cfg->bind_arr[i].addr, sizeof(nw_sockaddr));
         if (nw_ses_init(ses, nw_default_loop, svr->max_pkg_size, svr->buf_limit, NW_SES_TYPE_SERVER) < 0) {
             free(host_addr);
             nw_svr_free(svr);
@@ -244,7 +244,7 @@ nw_svr *nw_svr_create(nw_svr_cfg *cfg, nw_svr_type *type, void *privdata)
 
         if (cfg->bind_arr[i].sock_type == SOCK_DGRAM) {
             ses->peer_addr.s_family = host_addr->s_family;
-            ses->peer_addr.addrlen = host_addr->addrlen;
+            //ses->peer_addr.addrlen = host_addr->addrlen;
             set_socket_option(svr, sockfd);
         }
     }

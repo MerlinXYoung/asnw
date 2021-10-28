@@ -218,9 +218,10 @@ static void on_can_read(nw_ses *ses)
         break;
     case SOCK_DGRAM:
         {
+            socklen_t addrlen = sizeof(nw_sockaddr);
             while (true) {
                 int ret = recvfrom(ses->sockfd, ses->rbuf->data, ses->rbuf->size, 0, \
-                        NW_SOCKADDR(&ses->peer_addr), &ses->peer_addr.addrlen);
+                        NW_SOCKADDR(&ses->peer_addr), &addrlen);
                 if (ret < 0) {
                     if (errno == EINTR) {
                         continue;
@@ -352,11 +353,12 @@ static void on_can_accept(nw_ses *ses)
         return;
 
     while (true) {
-        nw_addr_t peer_addr;
+        nw_sockaddr peer_addr;
         memset(&peer_addr, 0, sizeof(peer_addr));
         peer_addr.s_family = ses->host_addr->s_family;
-        peer_addr.addrlen = ses->host_addr->addrlen;
-        int sockfd = accept(ses->sockfd, NW_SOCKADDR(&peer_addr), &peer_addr.addrlen);
+        //peer_addr.addrlen = ses->host_addr->addrlen;
+        socklen_t addrlen = sizeof(peer_addr);
+        int sockfd = accept(ses->sockfd, NW_SOCKADDR(&peer_addr), &addrlen);
         if (sockfd < 0) {
             if (errno == EINTR) {
                 continue;
@@ -414,14 +416,14 @@ static void libev_on_connect_evt(struct ev_loop *loop, ev_io *watcher, int event
         on_can_connect(ses);
 }
 
-int nw_ses_bind(nw_ses *ses, nw_addr_t *addr)
+int nw_ses_bind(nw_ses *ses, nw_sockaddr *addr)
 {
 #ifdef _NW_USE_UN_
     if (addr->s_family == AF_UNIX) {
         unlink(addr->un.sun_path);
     }
 #endif
-    int ret = bind(ses->sockfd, NW_SOCKADDR(addr), addr->addrlen);
+    int ret = bind(ses->sockfd, NW_SOCKADDR(addr), nw_sockaddr_len(addr));
     if (ret < 0)
         return ret;
 #ifdef _NW_USE_UN_
@@ -441,9 +443,9 @@ int nw_ses_listen(nw_ses *ses, int backlog)
     return 0;
 }
 
-int nw_ses_connect(nw_ses *ses, nw_addr_t *addr)
+int nw_ses_connect(nw_ses *ses, nw_sockaddr *addr)
 {
-    int ret = connect(ses->sockfd, NW_SOCKADDR(addr), addr->addrlen);
+    int ret = connect(ses->sockfd, NW_SOCKADDR(addr), nw_sockaddr_len(addr));
     if (ret == 0) {
         watch_read(ses);
         ses->on_connect(ses, true);

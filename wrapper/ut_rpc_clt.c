@@ -48,7 +48,7 @@ static int on_close(nw_ses *ses)
         clt->curr_index = 0;
         return 0;
     }
-    memcpy(&ses->peer_addr, &clt->addr_arr[clt->curr_index], sizeof(nw_addr_t));
+    memcpy(&ses->peer_addr, &clt->addr_arr[clt->curr_index], sizeof(nw_sockaddr));
     clt->curr_index += 1;
     return 1;
 }
@@ -85,7 +85,7 @@ rpc_clt *rpc_clt_create(rpc_clt_cfg *cfg, rpc_clt_type *type)
 
     nw_clt_cfg raw_cfg;
     memset(&raw_cfg, 0, sizeof(raw_cfg));
-    memcpy(&raw_cfg.addr, &cfg->addr_arr[0], sizeof(nw_addr_t));
+    memcpy(&raw_cfg.addr, &cfg->addr_arr[0], sizeof(nw_sockaddr));
     raw_cfg.sock_type = cfg->sock_type;
     raw_cfg.read_mem = cfg->read_mem;
     raw_cfg.write_mem = cfg->write_mem;
@@ -112,9 +112,9 @@ rpc_clt *rpc_clt_create(rpc_clt_cfg *cfg, rpc_clt_type *type)
     clt->name = strdup(cfg->name);
     assert(clt->name != NULL);
     clt->addr_count = cfg->addr_count;
-    clt->addr_arr = malloc(sizeof(nw_addr_t) * clt->addr_count);
+    clt->addr_arr = malloc(sizeof(nw_sockaddr) * clt->addr_count);
     assert(clt->addr_arr != NULL);
-    memcpy(clt->addr_arr, cfg->addr_arr, sizeof(nw_addr_t) * clt->addr_count);
+    memcpy(clt->addr_arr, cfg->addr_arr, sizeof(nw_sockaddr) * clt->addr_count);
 
     nw_timer_set(&clt->timer, RPC_HEARTBEAT_INTERVAL, true, on_timer, clt);
     clt->on_recv_pkg = type->on_recv_pkg;
