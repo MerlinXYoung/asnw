@@ -18,7 +18,7 @@ extern "C" {
 
     typedef struct nw_svr_bind {
         /* bind addr */
-        nw_sockaddr addr;
+        struct sockaddr_storage addr;
         /* bind type, SOCK_STREAM or SOCK_DGRAM or SOCK_SEQPACKET */
         int sock_type;
     } nw_svr_bind;
@@ -54,7 +54,7 @@ extern "C" {
          * when accept a new connection for non dgram type svr, the default action
          * is add the connection to the server, you can overwrite this action by
          * set on_accept function. return < 0, sockfd will be close */
-        int (*on_accept)(nw_ses* ses, int sockfd, nw_sockaddr* peer_addr);
+        int (*on_accept)(nw_ses* ses, int sockfd, struct sockaddr* peer_addr);
         /* optional
          *
          * called when a new connection is established */

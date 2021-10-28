@@ -7,7 +7,6 @@
 # include <stdlib.h>
 # include <unistd.h>
 # include <sys/time.h>
-#include "nw_mem.h"
 # include "nw_clt.h"
 
 static int create_socket(int family, int sock_type)
@@ -109,7 +108,7 @@ static void on_connect(nw_ses *ses, bool result)
     if (result) {
         clt->connected = true;
         set_socket_option(clt, clt->ses.sockfd);
-        nw_sock_host_addr(ses->sockfd, ses->host_addr);
+        getsockname(ses->sockfd, ses->host_addr, &ses->addrlen);
         if (clt->type.on_connect) {
             clt->type.on_connect(ses, result);
         }
@@ -182,20 +181,19 @@ nw_clt *nw_clt_create(nw_clt_cfg *cfg, nw_clt_type *type, void *privdata)
     clt->reconnect_timeout = cfg->reconnect_timeout  == 0 ? 1.0 : cfg->reconnect_timeout;
     clt->read_mem = cfg->read_mem;
     clt->write_mem = cfg->write_mem;
-
-    nw_sockaddr *host_addr = calloc(1, sizeof(nw_sockaddr));
+    socklen_t addrlen = nw_sockaddr_len(cfg->addr.ss_family);
+    struct sockaddr *host_addr = calloc(1, addrlen);
     if (host_addr == NULL) {
         nw_clt_release(clt);
         return NULL;
     }
-    host_addr->s_family = cfg->addr.s_family;
-    //host_addr->addrlen = cfg->addr.addrlen;
+    host_addr->sa_family = cfg->addr.ss_family;
 
-    if (nw_ses_init(&clt->ses, nw_default_loop, cfg->max_pkg_size, cfg->buf_limit, NW_SES_TYPE_CLIENT) < 0) {
+    if (nw_ses_init(&clt->ses, nw_default_loop, (struct sockaddr*)&cfg->addr, addrlen,
+        cfg->max_pkg_size, cfg->buf_limit, NW_SES_TYPE_CLIENT) < 0) {
         nw_clt_release(clt);
         return NULL;
     }
-    memcpy(&clt->ses.peer_addr, &cfg->addr, sizeof(nw_sockaddr));
     clt->ses.host_addr   = host_addr;
     clt->ses.sockfd      = -1;
     clt->ses.sock_type   = cfg->sock_type;
@@ -213,27 +211,23 @@ nw_clt *nw_clt_create(nw_clt_cfg *cfg, nw_clt_type *type, void *privdata)
 
 int nw_clt_start(nw_clt *clt)
 {
-    int sockfd = create_socket(clt->ses.peer_addr.s_family, clt->ses.sock_type);
+    int sockfd = create_socket(clt->ses.peer_addr->sa_family, clt->ses.sock_type);
     if (sockfd < 0) {
         return -1;
     }
     clt->ses.sockfd = sockfd;
-    if (clt->ses.peer_addr.s_family == AF_UNIX && clt->ses.sock_type == SOCK_DGRAM) {
-#ifdef _NW_USE_UN_
-        clt->ses.host_addr->un.sun_family = AF_UNIX;
-        generate_random_path(clt->ses.host_addr->un.sun_path, sizeof(clt->ses.host_addr->un.sun_path), "dgram", ".sock");
+    if (clt->ses.peer_addr->sa_family == AF_UNIX && clt->ses.sock_type == SOCK_DGRAM) {
+        clt->ses.host_addr->sa_family = AF_UNIX;
+        generate_random_path(((struct sockaddr_un*)clt->ses.host_addr)->sun_path, sizeof(struct sockaddr_un), "dgram", ".sock");
         if (nw_ses_bind(&clt->ses, clt->ses.host_addr) < 0) {
             return -1;
         }
-#else
-        return -1;
-#endif
     }
 
     if (clt->ses.sock_type == SOCK_STREAM || clt->ses.sock_type == SOCK_SEQPACKET) {
         clt->connected = false;
         clt->on_connect_called = false;
-        int ret = nw_ses_connect(&clt->ses, &clt->ses.peer_addr);
+        int ret = nw_ses_connect(&clt->ses, clt->ses.peer_addr);
         if (ret < 0) {
             if (clt->type.on_close) {
                 ret = clt->type.on_close(&clt->ses);
@@ -252,7 +246,8 @@ int nw_clt_start(nw_clt *clt)
     } else {
         clt->connected = true;
         set_socket_option(clt, clt->ses.sockfd);
-        nw_sock_host_addr(clt->ses.sockfd, clt->ses.host_addr);
+        socklen_t addrlen = clt->ses.addrlen;
+        getsockname(clt->ses.sockfd, clt->ses.host_addr, &addrlen);
         return nw_ses_start(&clt->ses);
     }
 }

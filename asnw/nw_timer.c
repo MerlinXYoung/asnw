@@ -4,7 +4,6 @@
  */
 
 # include "nw_timer.h"
-#include "nw_mem.h"
 
 static void on_timer(struct ev_loop *loop, ev_timer *ev, int events)
 {

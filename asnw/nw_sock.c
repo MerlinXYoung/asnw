@@ -10,72 +10,83 @@
 # include <fcntl.h>
 # include <netdb.h>
 # include <unistd.h>
-#include "nw_mem.h"
 # include "nw_sock.h"
 
-const char *nw_sock_human_addr(const nw_sockaddr *addr)
+const char *nw_sock_human_addr(const struct sockaddr *addr)
 {
-    static char str[128];
+    static char dst[NW_HUMAN_ADDR_SIZE];
     char ip[INET6_ADDRSTRLEN];
 
-    switch (addr->s_family) {
-    case AF_INET:
-        inet_ntop(addr->s_family, &addr->in.sin_addr, ip, sizeof(ip));
-        snprintf(str, sizeof(str), "%s:%u", ip, ntohs(addr->in.sin_port));
+    switch (addr->sa_family) {
+    case AF_INET: {
+        const struct sockaddr_in* in = (const struct sockaddr_in*)addr;
+        inet_ntop(in->sin_family, &in->sin_addr, ip, sizeof(ip));
+        snprintf(dst, sizeof(dst), "%s:%u", ip, ntohs(in->sin_port));
         break;
-    case AF_INET6:
-        inet_ntop(addr->s_family, &addr->in6.sin6_addr, ip, sizeof(ip));
-        snprintf(str, sizeof(str), "%s:%u", ip, ntohs(addr->in6.sin6_port));
+    }
+    case AF_INET6: {
+        const struct sockaddr_in6* in6 = (const struct sockaddr_in6*)addr;
+        inet_ntop(in6->sin6_family, &in6->sin6_addr, ip, sizeof(ip));
+        snprintf(dst, sizeof(dst), "%s:%u", ip, ntohs(in6->sin6_port));
         break;
-#ifdef _NW_USE_UN_
-    case AF_UNIX:
-        snprintf(str, sizeof(str), "%s:%s", "unix", (addr->un.sun_path));
+    }
+    case AF_UNIX: {
+        const struct sockaddr_un* un = (const struct sockaddr_un*)addr;
+        snprintf(dst, sizeof(dst), "%s:%s", "unix", (un->sun_path));
         break;
-#endif
+    }
     default:
-        str[0] = 0;
+        dst[0] = 0;
         break;
     }
 
-    return str;
+    return dst;
 }
 
-const char *nw_sock_human_addr_s(const nw_sockaddr *addr, char *dest)
+const char *nw_sock_human_addr_s(const struct sockaddr *addr, char *dst)
 {
     char ip[INET6_ADDRSTRLEN];
 
-    switch (addr->s_family) {
-    case AF_INET:
-        inet_ntop(addr->s_family, &addr->in.sin_addr, ip, sizeof(ip));
-        snprintf(dest, NW_HUMAN_ADDR_SIZE, "%s:%u", ip, ntohs(addr->in.sin_port));
+    switch (addr->sa_family) {
+    case AF_INET: {
+        const struct sockaddr_in* in = (const struct sockaddr_in*)addr;
+        inet_ntop(in->sin_family, &in->sin_addr, ip, sizeof(ip));
+        snprintf(dst, NW_HUMAN_ADDR_SIZE, "%s:%u", ip, ntohs(in->sin_port));
         break;
-    case AF_INET6:
-        inet_ntop(addr->s_family, &addr->in6.sin6_addr, ip, sizeof(ip));
-        snprintf(dest, NW_HUMAN_ADDR_SIZE, "%s:%u", ip, ntohs(addr->in6.sin6_port));
+    }
+    case AF_INET6: {
+        const struct sockaddr_in6* in6 = (const struct sockaddr_in6*)addr;
+        inet_ntop(in6->sin6_family, &in6->sin6_addr, ip, sizeof(ip));
+        snprintf(dst, NW_HUMAN_ADDR_SIZE, "%s:%u", ip, ntohs(in6->sin6_port));
         break;
-#ifdef _NW_USE_UN_
-    case AF_UNIX:
-        snprintf(dest, NW_HUMAN_ADDR_SIZE, "%s:%s", "unix", (addr->un.sun_path));
+    }
+    case AF_UNIX: {
+        const struct sockaddr_un* un = (const struct sockaddr_un*)addr;
+        snprintf(dst, NW_HUMAN_ADDR_SIZE, "%s:%s", "unix", (un->sun_path));
         break;
-#endif
+    }
     default:
-        dest[0] = 0;
+        dst[0] = 0;
         break;
     }
 
-    return dest;
+    return dst;
 }
 
-const char *nw_sock_ip(const nw_sockaddr *addr)
+const char *nw_sock_ip(const struct sockaddr *addr)
 {
     static char ip[INET6_ADDRSTRLEN];
-    switch (addr->s_family) {
-    case AF_INET:
-        inet_ntop(addr->s_family, &addr->in.sin_addr, ip, sizeof(ip));
+    switch (addr->sa_family) {
+    case AF_INET: {
+        const struct sockaddr_in* in = (const struct sockaddr_in*)addr;
+        inet_ntop(in->sin_family, &in->sin_addr, ip, sizeof(ip));
         break;
-    case AF_INET6:
-        inet_ntop(addr->s_family, &addr->in6.sin6_addr, ip, sizeof(ip));
+    }
+    case AF_INET6: {
+        const struct sockaddr_in6* in6 = (const struct sockaddr_in6*)addr;
+        inet_ntop(in6->sin6_family, &in6->sin6_addr, ip, sizeof(ip));
         break;
+    }
     default:
         ip[0] = 0;
         break;
@@ -83,115 +94,98 @@ const char *nw_sock_ip(const nw_sockaddr *addr)
     return ip;
 }
 
-const char *nw_sock_ip_s(const nw_sockaddr *addr, char *ip)
+const char *nw_sock_ip_s(const struct sockaddr *addr, char *ip)
 {
-    switch (addr->s_family) {
-    case AF_INET:
-        inet_ntop(addr->s_family, &addr->in.sin_addr, ip, NW_SOCK_IP_SIZE);
+    switch (addr->sa_family) {
+    case AF_INET: {
+        const struct sockaddr_in* in = (const struct sockaddr_in*)addr;
+        inet_ntop(in->sin_family, &in->sin_addr, ip, NW_SOCK_IP_SIZE);
         break;
-    case AF_INET6:
-        inet_ntop(addr->s_family, &addr->in6.sin6_addr, ip, NW_SOCK_IP_SIZE);
+    }
+    case AF_INET6: {
+        const struct sockaddr_in6* in6 = (const struct sockaddr_in6*)addr;
+        inet_ntop(in6->sin6_family, &in6->sin6_addr, ip, NW_SOCK_IP_SIZE);
         break;
+    }
     default:
         ip[0] = 0;
         break;
     }
     return ip;
 }
-#ifdef _NW_USE_UN_
-int nw_sock_set_mode(nw_sockaddr *addr, mode_t mode)
+
+int nw_sock_set_mode(struct sockaddr_un *addr, mode_t mode)
 {
-    if (addr->s_family != AF_UNIX)
+    if (!addr || addr->sun_family != AF_UNIX)
         return 0;
-    return chmod(addr->un.sun_path, mode);
-}
-#endif
-int nw_sock_peer_addr(int sockfd, nw_sockaddr *addr)
-{
-    socklen_t addrlen = sizeof(nw_sockaddr);
-    if (getpeername(sockfd, NW_SOCKADDR(addr), &addrlen) == 0)
-    {
-        addr->s_family = NW_SOCKADDR(addr)->sa_family;
-        return 0;
-    }
-    return -1;
+    return chmod(addr->sun_path, mode);
 }
 
-int nw_sock_host_addr(int sockfd, nw_sockaddr *addr)
+static int nw_sock_addr_fill_inet(struct sockaddr_in6* addr, const char* host, const char* port)
 {
-    socklen_t addrlen = sizeof(nw_sockaddr);
-    if (getsockname(sockfd, NW_SOCKADDR(addr), &addrlen) == 0)
-    {
-        addr->s_family = NW_SOCKADDR(addr)->sa_family;
-        return 0;
-    }
-    return -1;
-}
-
-static int nw_sock_addr_fill_inet(nw_sockaddr *addr, const char *host, const char *port)
-{
-    memset(addr, 0, sizeof(nw_sockaddr));
+    memset(addr, 0, sizeof(struct sockaddr_in6));
     if (strchr(host, '.') != NULL) {
-        addr->in.sin_family = AF_INET;
-        if (inet_pton(addr->in.sin_family, host, &addr->in.sin_addr) <= 0) {
+        struct sockaddr_in* in = (struct sockaddr_in*)addr;
+        in->sin_family = AF_INET;
+        if (inet_pton(in->sin_family, host, &in->sin_addr) <= 0) {
             return -1;
         }
-        addr->in.sin_port = htons(strtoul(port, NULL, 0));
-        addr->s_family = addr->in.sin_family;
-        //addr->addrlen = sizeof(addr->in);
-    } else {
-        addr->in6.sin6_family = AF_INET6;
-        if (inet_pton(addr->in6.sin6_family, host, &addr->in6.sin6_addr) <= 0) {
+        in->sin_port = htons(strtoul(port, NULL, 0));
+    }
+    else {
+        addr->sin6_family = AF_INET6;
+        if (inet_pton(addr->sin6_family, host, &addr->sin6_addr) <= 0) {
             return -1;
         }
-        addr->in6.sin6_port = htons(strtoul(port, NULL, 0));
-        addr->s_family = addr->in6.sin6_family;
-        //addr->addrlen = sizeof(addr->in6);
+        addr->sin6_port = htons(strtoul(port, NULL, 0));
     }
 
     return 0;
 }
-#ifdef _NW_USE_UN_
-static int nw_sock_addr_fill_unix(nw_sockaddr *addr, const char* unix_path)
+
+static int nw_sock_addr_fill_unix(struct sockaddr_un* addr, const char* unix_path)
 {
     size_t pathlen = strlen(unix_path);
-    if (pathlen >= sizeof(addr->un.sun_path)) {
+    if (pathlen >= sizeof(addr->sun_path)) {
         return -1;
     }
-    addr->un.sun_family = AF_UNIX;
-    strcpy(addr->un.sun_path, unix_path);
-    addr->s_family = addr->un.sun_family;
-    //addr->addrlen = sizeof(addr->un);
+    addr->sun_family = AF_UNIX;
+    strcpy(addr->sun_path, unix_path);
 
     return 0;
 }
-#endif
-int nw_sock_cfg_parse(const char *cfg, nw_sockaddr *addr, int *sock_type)
+
+int nw_sock_cfg_parse(const char* cfg, struct sockaddr_storage* addr, int* sock_type )
 {
-    char *s = strdup(cfg);
-    char *sep = strchr(s, '@');
+    char* s = strdup(cfg);
+    char* sep = strchr(s, '@');
     if (sep == NULL) {
         free(s);
         return -1;
     }
     *sep = '\0';
-    char *type = s;
-    char *name = sep + 1;
+    char* type = s;
+    char* name = sep + 1;
     int is_inet = 0;
 
     if (strcasecmp(type, "tcp") == 0) {
         *sock_type = SOCK_STREAM;
         is_inet = 1;
-    } else if (strcasecmp(type, "udp") == 0) {
+    }
+    else if (strcasecmp(type, "udp") == 0) {
         *sock_type = SOCK_DGRAM;
         is_inet = 1;
-    } else if (strcasecmp(type, "stream") == 0) {
+    }
+    else if (strcasecmp(type, "stream") == 0) {
         *sock_type = SOCK_STREAM;
-    } else if (strcasecmp(type, "dgram") == 0) {
+    }
+    else if (strcasecmp(type, "dgram") == 0) {
         *sock_type = SOCK_DGRAM;
-    } else if (strcasecmp(type, "seqpacket") == 0) {
+    }
+    else if (strcasecmp(type, "seqpacket") == 0) {
         *sock_type = SOCK_SEQPACKET;
-    } else {
+    }
+    else {
         free(s);
         return -2;
     }
@@ -203,21 +197,18 @@ int nw_sock_cfg_parse(const char *cfg, nw_sockaddr *addr, int *sock_type)
             return -3;
         }
         *sep = '\0';
-        char *host = name;
-        char *port = sep + 1;
-        if (nw_sock_addr_fill_inet(addr, host, port) < 0) {
+        char* host = name;
+        char* port = sep + 1;
+        if (nw_sock_addr_fill_inet((struct sockaddr_in6*)addr, host, port) < 0) {
             free(s);
             return -4;
         }
-    } else {
-#ifdef _NW_USE_UN_
-        if (nw_sock_addr_fill_unix(addr, name) < 0) {
+    }
+    else {
+        if (nw_sock_addr_fill_unix((struct sockaddr_un*)addr, name) < 0) {
             free(s);
             return -5;
         }
-#else 
-        return -5;
-#endif
     }
 
     free(s);

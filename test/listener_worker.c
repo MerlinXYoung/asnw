@@ -10,7 +10,7 @@
 # include <errno.h>
 # include <error.h>
 # include <unistd.h>
-
+#include <jemalloc/jemalloc.h>
 # include "nw_svr.h"
 # include "nw_clt.h"
 
@@ -31,7 +31,7 @@ int outer_decode_pkg(nw_ses *ses, void *data, size_t max)
     return 0;
 }
 
-int outer_on_accept(nw_ses *ses, int sockfd, nw_sockaddr *peer_addr)
+int outer_on_accept(nw_ses *ses, int sockfd, struct sockaddr *peer_addr)
 {
     if (inner_svr->clt_cnt == 0) {
         printf("worker: %d, no available worker\n", worker_id);
@@ -57,12 +57,12 @@ int outer_on_accept(nw_ses *ses, int sockfd, nw_sockaddr *peer_addr)
 
 void outer_on_new_connection(nw_ses *ses)
 {
-    printf("worker: %d: new connection from: %s\n", worker_id, nw_sock_human_addr(&ses->peer_addr));
+    printf("worker: %d: new connection from: %s\n", worker_id, nw_sock_human_addr(ses->peer_addr));
 }
 
 void outer_on_connection_close(nw_ses *ses)
 {
-    printf("worker: %d: connection: %s close\n", worker_id, nw_sock_human_addr(&ses->peer_addr));
+    printf("worker: %d: connection: %s close\n", worker_id, nw_sock_human_addr(ses->peer_addr));
 }
 
 void outer_on_recv_pkg(nw_ses *ses, void *data, size_t size)
@@ -70,7 +70,7 @@ void outer_on_recv_pkg(nw_ses *ses, void *data, size_t size)
     char *str = malloc(size + 1);
     memcpy(str, data, size);
     str[size] = 0;
-    printf("worker: %d, from: %s recv: %zu: %s\n", worker_id, nw_sock_human_addr(&ses->peer_addr), size, str);
+    printf("worker: %d, from: %s recv: %zu: %s\n", worker_id, nw_sock_human_addr(ses->peer_addr), size, str);
     if (nw_ses_send(ses, data, size) < 0) {
         printf("nw_ses_send fail\n");
     }
@@ -114,6 +114,7 @@ void inner_clt_on_connect(nw_ses *ses, bool result)
 int inner_clt_on_close(nw_ses *ses)
 {
     printf("worker: %d connection with listener close\n", worker_id);
+    return 0;
 }
 
 void inner_clt_on_recv_pkg(nw_ses *ses, void *data, size_t size)
@@ -163,7 +164,7 @@ int init_outer_svr(nw_svr_bind *bind)
 int init_inner_svr(void)
 {
     nw_svr_bind bind;
-    if (nw_sock_cfg_parse(inner_sock_cfg, &bind.addr, &bind.sock_type) < 0) {
+    if (nw_sock_cfg_parse(inner_sock_cfg, &bind.addr, &bind.sock_type ) < 0) {
         return -1;
     }
 

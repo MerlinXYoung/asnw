@@ -38,10 +38,11 @@ extern "C" {
             /* one of NW_SES_TYPE_COMMON, NW_SES_TYPE_CLIENT, NW_SES_TYPE_SERVER */
             int ses_type : 16;
         };
+        socklen_t addrlen;
         /* peer addr */
-        nw_sockaddr peer_addr;
+        struct sockaddr* peer_addr;//malloc
         /* host addr */
-        nw_sockaddr* host_addr;
+        struct sockaddr* host_addr;
 
         uint32_t buf_limit;
         struct nw_buf* rbuf;
@@ -60,7 +61,7 @@ extern "C" {
 
         int  (*decode_pkg)(struct nw_ses* ses, void* data, size_t max);
         union {
-            int  (*on_accept)(struct nw_ses* ses, int sockfd, nw_sockaddr* peer_addr);
+            int  (*on_accept)(struct nw_ses* ses, int sockfd, struct sockaddr* peer_addr);
             void (*on_connect)(struct nw_ses* ses, bool result);
         };
         void (*on_recv_pkg)(struct nw_ses* ses, void* data, size_t size);
@@ -69,9 +70,9 @@ extern "C" {
         void (*on_close)(struct nw_ses* ses);
     } nw_ses;
 
-    int nw_ses_bind(nw_ses* ses, nw_sockaddr* addr);
+    int nw_ses_bind(nw_ses* ses, struct sockaddr* addr);
     int nw_ses_listen(nw_ses* ses, int backlog);
-    int nw_ses_connect(nw_ses* ses, nw_sockaddr* addr);
+    int nw_ses_connect(nw_ses* ses, struct sockaddr* addr);
 
     int nw_ses_start(nw_ses* ses);
     int nw_ses_stop(nw_ses* ses);
@@ -79,7 +80,8 @@ extern "C" {
     /* send a fd, only when the connection is SOCK_SEQPACKET type */
     int nw_ses_send_fd(nw_ses* ses, int fd);
 
-    int nw_ses_init(nw_ses* ses, struct ev_loop* loop, uint32_t buf_limit, uint32_t wlist_limit, int ses_type);
+    int nw_ses_init(nw_ses* ses, struct ev_loop* loop, struct sockaddr* peer_addr, socklen_t addrlen, 
+        uint32_t buf_limit, uint32_t wlist_limit, int ses_type);
     int nw_ses_close(nw_ses* ses);
     int nw_ses_release(nw_ses* ses);
 #ifdef __cplusplus

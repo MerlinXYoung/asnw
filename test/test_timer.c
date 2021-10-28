@@ -4,7 +4,7 @@
  */
 
 # include <stdio.h>
-
+#include <jemalloc/jemalloc.h>
 # include "nw_timer.h"
 
 void on_timer(nw_timer *timer, void *private)

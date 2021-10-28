@@ -6,7 +6,6 @@
 # include <stdlib.h>
 # include <stdio.h>
 # include <unistd.h>
-#include "nw_mem.h"
 # include "nw_svr.h"
 
 static int create_socket(int family, int sock_type)
@@ -88,7 +87,7 @@ static void nw_svr_free(nw_svr *svr)
     free(svr);
 }
 
-static int nw_svr_add_clt(nw_ses *ses, int sockfd, nw_sockaddr *peer_addr)
+static int nw_svr_add_clt(nw_ses *ses, int sockfd, struct sockaddr *peer_addr)
 {
     nw_svr *svr = (nw_svr *)ses->svr;
     set_socket_option(svr, sockfd);
@@ -108,14 +107,14 @@ static int nw_svr_add_clt(nw_ses *ses, int sockfd, nw_sockaddr *peer_addr)
     if (clt == NULL) {
         return -1;
     }
-    if (nw_ses_init(clt, nw_default_loop, svr->max_pkg_size, svr->buf_limit, NW_SES_TYPE_COMMON) < 0) {
+    if (nw_ses_init(clt, nw_default_loop, peer_addr, ses->addrlen, svr->max_pkg_size, svr->buf_limit, NW_SES_TYPE_COMMON) < 0) {
         free(clt);
         if (privdata) {
             svr->type.on_privdata_free(svr, privdata);
         }
         return -1;
     }
-    memcpy(&clt->peer_addr, peer_addr, sizeof(nw_sockaddr));
+    //memcpy(&clt->peer_addr, peer_addr, ses->addrlen);
     clt->host_addr   = ses->host_addr;
     clt->sockfd      = sockfd;
     clt->sock_type   = ses->sock_type;
@@ -153,7 +152,7 @@ static int nw_svr_add_clt(nw_ses *ses, int sockfd, nw_sockaddr *peer_addr)
     return 0;
 }
 
-static int on_accept(nw_ses *ses, int sockfd, nw_sockaddr *peer_addr)
+static int on_accept(nw_ses *ses, int sockfd, struct sockaddr *peer_addr)
 {
     nw_svr *svr = (nw_svr *)ses->svr;
     if (svr->type.on_accept) {
@@ -164,20 +163,21 @@ static int on_accept(nw_ses *ses, int sockfd, nw_sockaddr *peer_addr)
 
 int nw_svr_add_clt_fd(nw_svr *svr, int fd)
 {
-    nw_sockaddr peer_addr;
-    if (nw_sock_peer_addr(fd, &peer_addr) < 0) {
+    struct sockaddr_storage peer_addr;
+    socklen_t addrlen = sizeof(struct sockaddr_storage);
+    if (getpeername(fd, (struct sockaddr*)&peer_addr, &addrlen) < 0) {
         return -1;
     }
     nw_ses *ses = NULL;
     for (uint32_t i = 0; i < svr->svr_cnt; ++i) {
-        if (peer_addr.s_family == svr->svr_list[i].host_addr->s_family) {
+        if (peer_addr.ss_family == svr->svr_list[i].host_addr->sa_family) {
             ses = &svr->svr_list[i];
             break;
         }
     }
     if (ses == NULL)
         return -1;
-    return nw_svr_add_clt(ses, fd, &peer_addr);
+    return nw_svr_add_clt(ses, fd, (struct sockaddr*)&peer_addr);
 }
 
 nw_svr *nw_svr_create(nw_svr_cfg *cfg, nw_svr_type *type, void *privdata)
@@ -195,13 +195,13 @@ nw_svr *nw_svr_create(nw_svr_cfg *cfg, nw_svr_type *type, void *privdata)
     if (type->on_privdata_alloc && !type->on_privdata_free)
         return NULL;
 
-    nw_svr *svr = malloc(sizeof(nw_svr));
+    nw_svr *svr = calloc(1, sizeof(nw_svr));
     if (svr == NULL)
         return NULL;
-    memset(svr, 0, sizeof(nw_svr));
+
     svr->type = *type;
     svr->svr_cnt = cfg->bind_count;
-    svr->svr_list = malloc(sizeof(nw_ses) * svr->svr_cnt);
+    svr->svr_list = calloc(svr->svr_cnt, sizeof(nw_ses));
     if (svr->svr_list == NULL) {
         nw_svr_free(svr);
         return NULL;
@@ -211,21 +211,23 @@ nw_svr *nw_svr_create(nw_svr_cfg *cfg, nw_svr_type *type, void *privdata)
     svr->read_mem = cfg->read_mem;
     svr->write_mem = cfg->write_mem;
     svr->privdata = privdata;
-    memset(svr->svr_list, 0, sizeof(nw_ses) * svr->svr_cnt);
+
     for (uint32_t i = 0; i < svr->svr_cnt; ++i) {
         nw_ses *ses = &svr->svr_list[i];
-        int sockfd = create_socket(cfg->bind_arr[i].addr.s_family, cfg->bind_arr[i].sock_type);
+        int sockfd = create_socket(cfg->bind_arr[i].addr.ss_family, cfg->bind_arr[i].sock_type);
         if (sockfd < 0) {
             nw_svr_free(svr);
             return NULL;
         }
-        nw_sockaddr *host_addr = malloc(sizeof(nw_sockaddr));
+        socklen_t addrlen = nw_sockaddr_len(cfg->bind_arr[i].addr.ss_family);
+        struct sockaddr *host_addr = (struct sockaddr*)malloc(addrlen);
         if (host_addr == NULL) {
             nw_svr_free(svr);
             return NULL;
         }
-        memcpy(host_addr, &cfg->bind_arr[i].addr, sizeof(nw_sockaddr));
-        if (nw_ses_init(ses, nw_default_loop, svr->max_pkg_size, svr->buf_limit, NW_SES_TYPE_SERVER) < 0) {
+        host_addr->sa_family = cfg->bind_arr[i].addr.ss_family;
+        if (nw_ses_init(ses, nw_default_loop, NULL, addrlen,
+            svr->max_pkg_size, svr->buf_limit, NW_SES_TYPE_SERVER) < 0) {
             free(host_addr);
             nw_svr_free(svr);
             return NULL;
@@ -243,7 +245,7 @@ nw_svr *nw_svr_create(nw_svr_cfg *cfg, nw_svr_type *type, void *privdata)
         ses->on_close    = on_close;
 
         if (cfg->bind_arr[i].sock_type == SOCK_DGRAM) {
-            ses->peer_addr.s_family = host_addr->s_family;
+            ses->peer_addr->sa_family = host_addr->sa_family;
             //ses->peer_addr.addrlen = host_addr->addrlen;
             set_socket_option(svr, sockfd);
         }

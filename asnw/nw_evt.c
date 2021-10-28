@@ -7,7 +7,6 @@
 # include <unistd.h>
 # include <limits.h>
 # include <libgen.h>
-#include "nw_mem.h"
 # include "nw_evt.h"
 
 struct ev_loop *nw_default_loop;

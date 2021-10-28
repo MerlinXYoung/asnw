@@ -9,7 +9,7 @@
 # include <unistd.h>
 # include <errno.h>
 # include <error.h>
-
+#include <jemalloc/jemalloc.h>
 # include "nw_clt.h"
 # include "nw_timer.h"
 
@@ -26,15 +26,16 @@ int decode_pkg(nw_ses *ses, void *data, size_t max)
 void on_connect(nw_ses *ses, bool result)
 {
     if (result) {
-        printf("connect to: %s success\n", nw_sock_human_addr(&ses->peer_addr));
+        printf("connect to: %s success\n", nw_sock_human_addr(ses->peer_addr));
     } else {
-        printf("connect to: %s fail: %s\n", nw_sock_human_addr(&ses->peer_addr), strerror(errno));
+        printf("connect to: %s fail: %s\n", nw_sock_human_addr(ses->peer_addr), strerror(errno));
     }
 }
 
 int on_close(nw_ses *ses)
 {
-    printf("connection to: %s close\n", nw_sock_human_addr(&ses->peer_addr));
+    printf("connection to: %s close\n", nw_sock_human_addr(ses->peer_addr));
+    return 0;
 }
 
 void on_recv_pkg(nw_ses *ses, void *data, size_t size)
@@ -42,13 +43,13 @@ void on_recv_pkg(nw_ses *ses, void *data, size_t size)
     char *str = malloc(size + 1);
     memcpy(str, data, size);
     str[size] = 0;
-    printf("from: %s recv: %zu: %s", nw_sock_human_addr(&ses->peer_addr), size, str);
+    printf("from: %s recv: %zu: %s", nw_sock_human_addr(ses->peer_addr), size, str);
     free(str);
 }
 
 void on_error_msg(nw_ses *ses, const char *msg)
 {
-    printf("error occur: %s, perr: %s\n", msg, nw_sock_human_addr(&ses->peer_addr));
+    printf("error occur: %s, perr: %s\n", msg, nw_sock_human_addr(ses->peer_addr));
 }
 
 void on_timeout(nw_timer *timer, void *privdata)
@@ -66,11 +67,10 @@ int main(int argc, char *argv[])
         printf("usage: %s addr\n", argv[0]);
         exit(0);
     }
-    printf("sizeof(nw_sockaddr):%lu sizeof(sockaddr_in6):%lu\n", sizeof(nw_sockaddr), sizeof(struct sockaddr_in6));
     nw_clt_cfg cfg;
     memset(&cfg, 0, sizeof(cfg));
     cfg.max_pkg_size = 10240;
-    if (nw_sock_cfg_parse(argv[1], &cfg.addr, &cfg.sock_type) < 0) {
+    if (nw_sock_cfg_parse(argv[1], &cfg.addr, &cfg.sock_type ) < 0) {
         error(1, errno, "parse peer addr: %s fail", argv[1]);
     }
 

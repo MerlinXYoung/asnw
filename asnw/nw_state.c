@@ -5,7 +5,6 @@
 
 # include <stdlib.h>
 # include <stdbool.h>
-#include "nw_mem.h"
 # include "nw_state.h"
 
 # define NW_STATE_HASH_TABLE_INIT_SIZE 64

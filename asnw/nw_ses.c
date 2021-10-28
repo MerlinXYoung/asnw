@@ -6,7 +6,6 @@
 # include <stdio.h>
 # include <errno.h>
 # include <unistd.h>
-#include "nw_mem.h"
 # include "nw_ses.h"
 #include "nw_utils.h"
  /* nw_buf is the basic instance of buf, with limit size */
@@ -218,10 +217,9 @@ static void on_can_read(nw_ses *ses)
         break;
     case SOCK_DGRAM:
         {
-            socklen_t addrlen = sizeof(nw_sockaddr);
             while (true) {
-                int ret = recvfrom(ses->sockfd, ses->rbuf->data, ses->rbuf->size, 0, \
-                        NW_SOCKADDR(&ses->peer_addr), &addrlen);
+                int ret = recvfrom(ses->sockfd, ses->rbuf->data, ses->rbuf->size, 0, 
+                        ses->peer_addr, &ses->addrlen);
                 if (ret < 0) {
                     if (errno == EINTR) {
                         continue;
@@ -353,12 +351,10 @@ static void on_can_accept(nw_ses *ses)
         return;
 
     while (true) {
-        nw_sockaddr peer_addr;
+        struct sockaddr_storage peer_addr;
         memset(&peer_addr, 0, sizeof(peer_addr));
-        peer_addr.s_family = ses->host_addr->s_family;
-        //peer_addr.addrlen = ses->host_addr->addrlen;
         socklen_t addrlen = sizeof(peer_addr);
-        int sockfd = accept(ses->sockfd, NW_SOCKADDR(&peer_addr), &addrlen);
+        int sockfd = accept(ses->sockfd, (struct sockaddr*)&peer_addr, &addrlen);
         if (sockfd < 0) {
             if (errno == EINTR) {
                 continue;
@@ -371,7 +367,7 @@ static void on_can_accept(nw_ses *ses)
                 return;
             }
         } else {
-            int ret = ses->on_accept(ses, sockfd, &peer_addr);
+            int ret = ses->on_accept(ses, sockfd, (struct sockaddr*)&peer_addr);
             if (ret < 0) {
                 close(sockfd);
             }
@@ -416,21 +412,21 @@ static void libev_on_connect_evt(struct ev_loop *loop, ev_io *watcher, int event
         on_can_connect(ses);
 }
 
-int nw_ses_bind(nw_ses *ses, nw_sockaddr *addr)
+int nw_ses_bind(nw_ses *ses, struct sockaddr *addr)
 {
-#ifdef _NW_USE_UN_
-    if (addr->s_family == AF_UNIX) {
-        unlink(addr->un.sun_path);
+
+    if (addr->sa_family == AF_UNIX) {
+        unlink(((struct sockaddr_un*)addr)->sun_path);
     }
-#endif
-    int ret = bind(ses->sockfd, NW_SOCKADDR(addr), nw_sockaddr_len(addr));
+
+    int ret = bind(ses->sockfd, addr, nw_sockaddr_len(addr->sa_family));
     if (ret < 0)
         return ret;
-#ifdef _NW_USE_UN_
-    if (addr->s_family == AF_UNIX) {
-        return nw_sock_set_mode(addr, 0777);
+
+    if (addr->sa_family == AF_UNIX) {
+        return nw_sock_set_mode((struct sockaddr_un*)addr, 0777);
     }
-#endif
+
     return 0;
 }
 
@@ -443,9 +439,9 @@ int nw_ses_listen(nw_ses *ses, int backlog)
     return 0;
 }
 
-int nw_ses_connect(nw_ses *ses, nw_sockaddr *addr)
+int nw_ses_connect(nw_ses *ses, struct sockaddr *addr)
 {
-    int ret = connect(ses->sockfd, NW_SOCKADDR(addr), nw_sockaddr_len(addr));
+    int ret = connect(ses->sockfd, addr, nw_sockaddr_len(addr->sa_family));
     if (ret == 0) {
         watch_read(ses);
         ses->on_connect(ses, true);
@@ -516,7 +512,7 @@ int nw_ses_send(nw_ses *ses, const void *data, size_t size)
             break;
         case SOCK_DGRAM:
             {
-                int ret = sendto(ses->sockfd, data, size, 0, NW_SOCKADDR(&ses->peer_addr), nw_sockaddr_len(&ses->peer_addr));
+                int ret = sendto(ses->sockfd, data, size, 0, ses->peer_addr, nw_sockaddr_len(ses->peer_addr->sa_family));
                 if (ret < 0) {
                     char errmsg[100];
                     snprintf(errmsg, sizeof(errmsg), "sendto error: %s", strerror(errno));
@@ -579,13 +575,21 @@ int nw_ses_send_fd(nw_ses *ses, int fd)
     return sendmsg(ses->sockfd, &msg, MSG_EOR);
 }
 
-int nw_ses_init(nw_ses *ses, struct ev_loop *loop, uint32_t buf_limit, uint32_t wlist_limit, int ses_type)
+int nw_ses_init(nw_ses *ses, struct ev_loop *loop, struct sockaddr* peer_addr, socklen_t addrlen, 
+    uint32_t buf_limit, uint32_t wlist_limit, int ses_type)
 {
     memset(ses, 0, sizeof(nw_ses));
     ses->loop = loop;
     ses->ses_type = ses_type;
     ses->buf_limit = buf_limit;
     ses->wlist_limit = wlist_limit;
+    if (addrlen > 0) {
+        ses->peer_addr = (struct sockaddr*)malloc(addrlen);
+        if (!ses->peer_addr)
+            return -1;
+        memcpy(ses->peer_addr, peer_addr, addrlen);
+    }
+    ses->addrlen = addrlen;
 
     return 0;
 }
@@ -614,10 +618,8 @@ int nw_ses_close(nw_ses *ses)
 int nw_ses_release(nw_ses *ses)
 {
     nw_ses_close(ses);
-    //if (ses) {
-    //    nw_buf_list_release(ses);
-    //    ses = NULL;
-    //}
+    free(ses->peer_addr);
+    ses->peer_addr = NULL;
 
     return 0;
 }

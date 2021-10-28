@@ -6,9 +6,9 @@
 # include <stdio.h>
 # include <errno.h>
 # include <error.h>
-
+#include <jemalloc/jemalloc.h>
 # include "nw_state.h"
-#include "nw_mem.h"
+
 
 struct test_data {
     char *str;

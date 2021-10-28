@@ -7,7 +7,7 @@
 # include <errno.h>
 # include <stdlib.h>
 # include <unistd.h>
-
+#include <jemalloc/jemalloc.h>
 # include "nw_svr.h"
 # include "nw_timer.h"
 
@@ -23,12 +23,12 @@ int decode_pkg(nw_ses *ses, void *data, size_t max)
 
 void on_new_connection(nw_ses *ses)
 {
-    printf("new connection from: %s\n", nw_sock_human_addr(&ses->peer_addr));
+    printf("new connection from: %s\n", nw_sock_human_addr(ses->peer_addr));
 }
 
 void on_connection_close(nw_ses *ses)
 {
-    printf("connection: %s close\n", nw_sock_human_addr(&ses->peer_addr));
+    printf("connection: %s close\n", nw_sock_human_addr(ses->peer_addr));
 }
 
 void on_recv_pkg(nw_ses *ses, void *data, size_t size)
@@ -36,7 +36,7 @@ void on_recv_pkg(nw_ses *ses, void *data, size_t size)
     char *str = malloc(size + 1);
     memcpy(str, data, size);
     str[size] = 0;
-    printf("from: %s recv: %zu: %s", nw_sock_human_addr(&ses->peer_addr), size, str);
+    printf("from: %s recv: %zu: %s", nw_sock_human_addr(ses->peer_addr), size, str);
     if (nw_ses_send(ses, data, size) < 0) {
         printf("nw_ses_send fail\n");
     }
@@ -58,7 +58,7 @@ void on_recv_fd(nw_ses *ses, int fd)
 
 void on_error_msg(nw_ses *ses, const char *msg)
 {
-    printf("error occur: %s, perr: %s\n", msg, nw_sock_human_addr(&ses->peer_addr));
+    printf("error occur: %s, perr: %s\n", msg, nw_sock_human_addr(ses->peer_addr));
 }
 
 void on_timer(nw_timer *timer, void *privdata)
@@ -75,14 +75,14 @@ int main(int argc, char *argv[])
     }
 
     int bind_count = argc - 1;
-    nw_svr_bind *bind_arr = malloc(sizeof(nw_svr_bind) * bind_count);
+    nw_svr_bind *bind_arr = calloc(bind_count, sizeof(nw_svr_bind) );
     if (bind_arr == NULL) {
         printf("malloc fail\n");
         exit(0);
     }
-    memset(bind_arr, sizeof(nw_svr_bind) * bind_count, 0);
+
     for (int i = 0; i < bind_count; ++i) {
-        int ret = nw_sock_cfg_parse(argv[i + 1], &bind_arr[i].addr, &bind_arr[i].sock_type);
+        int ret = nw_sock_cfg_parse(argv[i + 1], &bind_arr[i].addr, &bind_arr[i].sock_type );
         if (ret < 0) {
             printf("parse bind: %s fail: %d\n", argv[1], ret);
             exit(0);

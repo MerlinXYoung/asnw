@@ -15,7 +15,7 @@
 # include <sys/stat.h>  
 # include <sys/socket.h>  
 # include <sys/un.h>
-
+#include <jemalloc/jemalloc.h>
 int main(int argc, char *argv[])
 {
     if (argc != 3) {
