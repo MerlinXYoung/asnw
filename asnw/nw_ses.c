@@ -516,7 +516,7 @@ int nw_ses_send(nw_ses *ses, const void *data, size_t size)
             break;
         case SOCK_DGRAM:
             {
-                int ret = sendto(ses->sockfd, data, size, 0, NW_SOCKADDR(&ses->peer_addr), ses->peer_addr.addrlen);
+                int ret = sendto(ses->sockfd, data, size, 0, NW_SOCKADDR(&ses->peer_addr), nw_sockaddr_len(&ses->peer_addr));
                 if (ret < 0) {
                     char errmsg[100];
                     snprintf(errmsg, sizeof(errmsg), "sendto error: %s", strerror(errno));

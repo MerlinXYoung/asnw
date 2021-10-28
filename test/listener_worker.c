@@ -14,7 +14,7 @@
 # include "nw_svr.h"
 # include "nw_clt.h"
 
-int worker_id;
+int worker_id=0;
 uint32_t max_pkg_size = 10240;
 nw_svr *outer_svr;
 nw_svr *inner_svr;
@@ -70,7 +70,7 @@ void outer_on_recv_pkg(nw_ses *ses, void *data, size_t size)
     char *str = malloc(size + 1);
     memcpy(str, data, size);
     str[size] = 0;
-    printf("worker: %d, from: %s recv: %zu: %s", worker_id, nw_sock_human_addr(&ses->peer_addr), size, str);
+    printf("worker: %d, from: %s recv: %zu: %s\n", worker_id, nw_sock_human_addr(&ses->peer_addr), size, str);
     if (nw_ses_send(ses, data, size) < 0) {
         printf("nw_ses_send fail\n");
     }
@@ -180,6 +180,8 @@ int init_inner_svr(void)
     type.on_recv_pkg = inner_svr_on_recv_pkg;
     type.on_error_msg = inner_svr_on_error_msg;
 
+    type.decode_pkg = outer_decode_pkg;
+
     inner_svr = nw_svr_create(&cfg, &type, NULL);
     if (inner_svr == NULL) {
         return -1;
@@ -193,6 +195,7 @@ int init_inner_clt(void)
     nw_clt_cfg cfg;
     memset(&cfg, 0, sizeof(cfg));
     if (nw_sock_cfg_parse(inner_sock_cfg, &cfg.addr, &cfg.sock_type) < 0) {
+        fprintf(stderr, "nw_sock_cfg_parse error\n");
         return -1;
     }
     cfg.max_pkg_size = max_pkg_size;
@@ -205,8 +208,11 @@ int init_inner_clt(void)
     type.on_recv_fd = inner_clt_on_recv_fd;
     type.on_error_msg = inner_clt_on_error_msg;
 
+    type.decode_pkg = outer_decode_pkg;
+
     inner_clt = nw_clt_create(&cfg, &type, NULL);
     if (inner_clt == NULL) {
+        fprintf(stderr, "nw_clt_create error\n");
         return -1;
     }
 
@@ -277,11 +283,11 @@ int main(int argc, char *argv[])
     for (size_t i = 0; i < worker_num; ++i) {
         int pid = fork();
         if (pid < 0) {
-            error(1, errno, "fork error");
+            error(1, errno, "fork error\n");
         } else if (pid == 0) {
             worker_id = i + 1;
             if (init_as_worker(&bind) < 0) {
-                error(1, errno, "init worker: %d fail", worker_id);
+                error(1, errno, "init worker: %d fail\n", worker_id);
             }
             break;
         }
@@ -289,11 +295,11 @@ int main(int argc, char *argv[])
 
     if (worker_id == 0) {
         if (init_as_listener(&bind) < 0) {
-            error(1, errno, "init listener fail");
+            error(1, errno, "init listener fail\n");
         }
     } else {
         if (nw_clt_start(inner_clt) < 0) {
-            error(1, errno, "nw_clt_start fail");
+            error(1, errno, "nw_clt_start fail\n");
         }
     }
 

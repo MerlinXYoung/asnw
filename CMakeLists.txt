@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
 project(ASNW)
 
+add_compile_options(-D_NW_USE_UN_)
+
 find_package(CURL REQUIRED)
 include_directories(${CURL_INCLUD_DIR})
 

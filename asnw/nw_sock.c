@@ -161,7 +161,7 @@ static int nw_sock_addr_fill_unix(nw_sockaddr *addr, const char* unix_path)
     addr->un.sun_family = AF_UNIX;
     strcpy(addr->un.sun_path, unix_path);
     addr->s_family = addr->un.sun_family;
-    addr->addrlen = sizeof(addr->un);
+    //addr->addrlen = sizeof(addr->un);
 
     return 0;
 }

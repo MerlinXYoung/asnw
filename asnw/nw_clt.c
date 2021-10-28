@@ -183,12 +183,11 @@ nw_clt *nw_clt_create(nw_clt_cfg *cfg, nw_clt_type *type, void *privdata)
     clt->read_mem = cfg->read_mem;
     clt->write_mem = cfg->write_mem;
 
-    nw_sockaddr *host_addr = malloc(sizeof(nw_sockaddr));
+    nw_sockaddr *host_addr = calloc(1, sizeof(nw_sockaddr));
     if (host_addr == NULL) {
         nw_clt_release(clt);
         return NULL;
     }
-    memset(host_addr, 0, sizeof(nw_sockaddr));
     host_addr->s_family = cfg->addr.s_family;
     //host_addr->addrlen = cfg->addr.addrlen;
 
