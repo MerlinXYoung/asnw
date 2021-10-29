@@ -225,7 +225,8 @@ nw_svr *nw_svr_create(nw_svr_cfg *cfg, nw_svr_type *type, void *privdata)
             nw_svr_free(svr);
             return NULL;
         }
-        host_addr->sa_family = cfg->bind_arr[i].addr.ss_family;
+        //host_addr->sa_family = cfg->bind_arr[i].addr.ss_family;
+        memcpy(host_addr, &cfg->bind_arr[i].addr, addrlen);
         if (nw_ses_init(ses, nw_default_loop, NULL, addrlen,
             svr->max_pkg_size, svr->buf_limit, NW_SES_TYPE_SERVER) < 0) {
             free(host_addr);

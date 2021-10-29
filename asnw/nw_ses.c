@@ -131,16 +131,17 @@ static int nw_write_stream(nw_ses *ses, const void *data, size_t size)
 static int nw_write_packet(nw_ses *ses, const void *data, size_t size)
 {
     while (true) {
-        struct msghdr msg;
-        struct iovec io;
+        struct msghdr msg ;
+        struct iovec io ;
 
         memset(&msg, 0, sizeof(msg));
         io.iov_base = (void *)data;
         io.iov_len = size;
         msg.msg_iov = &io;
         msg.msg_iovlen = 1;
+        msg.msg_flags = MSG_EOR;
 
-        int ret = sendmsg(ses->sockfd, &msg, MSG_EOR);
+        int ret = sendmsg(ses->sockfd, &msg, 0);
         if (ret < 0 && errno == EINTR) {
             continue;
         } else {
@@ -583,7 +584,7 @@ int nw_ses_init(nw_ses *ses, struct ev_loop *loop, struct sockaddr* peer_addr, s
     ses->ses_type = ses_type;
     ses->buf_limit = buf_limit;
     ses->wlist_limit = wlist_limit;
-    if (addrlen > 0) {
+    if (peer_addr && addrlen > 0) {
         ses->peer_addr = (struct sockaddr*)malloc(addrlen);
         if (!ses->peer_addr)
             return -1;
